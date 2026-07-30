@@ -1,0 +1,6 @@
+import React from 'react';
+import { EmptyState } from '../../components/ui';
+
+export default function Portal() {
+  return <EmptyState title="Portal is on its way" body="This screen lands with its build stage." />;
+}
