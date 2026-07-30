@@ -27,7 +27,8 @@ export default function Overheads() {
 
   const tryAdd = () => {
     const candidate = {
-      id: 'new', createdAt: '', createdBy: '', updatedAt: '', updatedBy: '',
+      id: 'oh-new', createdAt: '2026-06-30T00:00:00Z', createdBy: account.userId,
+      updatedAt: '2026-06-30T00:00:00Z', updatedBy: account.userId,
       category: 'other', description, amountMinor: 100000, currency: 'SGD',
       recurrence: 'monthly', effectiveFrom: '2026-07-01', paymentStatus: 'planned',
     };

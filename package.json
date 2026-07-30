@@ -10,8 +10,11 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "playwright-core": "^1.62.1",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

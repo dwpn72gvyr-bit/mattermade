@@ -347,10 +347,15 @@ export function getPortfolio(account: DemoAccount) {
     return visible.map((p): PortfolioRow => {
       const metrics = computeProjectMetrics(p);
       const res = { type: 'project' as const, projectId: p.id };
+      // §7.2: contract value is visible to the project's lead, leadership and
+      // finance; a plain team member sees no project money at all.
+      const feeVisible = seesAll || account.leadProjectIds.includes(p.id);
       return {
         project: p,
         metrics,
-        fee: maskable(actor, res, 'fee', metrics.totalApprovedFeeMinor, FIXTURE_TODAY),
+        fee: feeVisible
+          ? { value: metrics.totalApprovedFeeMinor }
+          : { maskedAs: 'hidden' },
         actualCost: maskable(actor, res, 'actualCostMinor', metrics.actDirectCostMinor, FIXTURE_TODAY),
         grossProfit: maskable(actor, res, 'grossProfitMinor', metrics.grossProfitMinor, FIXTURE_TODAY),
         margin: maskable(actor, res, 'marginPct', metrics.grossMargin, FIXTURE_TODAY),

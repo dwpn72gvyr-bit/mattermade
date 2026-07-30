@@ -55,3 +55,12 @@ The ten non-negotiable rules are in `CLAUDE.md`. The full brief is `docs/MASTER-
 ## Status and limitations
 
 Stage A build (fully navigable application on deterministic mock data). The real backend (Fastify + tRPC + Prisma + Postgres), auth, audit persistence and period-lock snapshotting arrive with Stage B; CSV import, exports and notifications with Stage C. Capacity planner, report builder, integrations, external portal depth and pricing intelligence are deliberately out of Release 1 scope.
+
+## Stress test
+
+`node tools/stress.mjs` (with `pnpm dev` running) drives the app in headless
+Chromium through seven personas: employee, super admin, finance administrator,
+people manager, leadership, single-project lead and an OE Verse freelancer.
+52 checks cover function, permission masking, report accuracy against the
+worked examples, period lock and reopen guards, the variation flow, the
+discount floor confirmation and the payroll guard.

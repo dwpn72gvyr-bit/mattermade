@@ -315,7 +315,7 @@ export default function PlanQuoteFlow() {
             </Card>
             <Card>
               <div className="text-sm text-ink-muted mb-1">Discount lever</div>
-              <input type="range" min={0} max={0.3} step={0.01} value={discountPct}
+              <input type="range" min={0} max={0.6} step={0.01} value={discountPct}
                 onChange={(e) => { setDiscountPct(Number(e.target.value)); setConfirmedBreach(false); }}
                 className="w-full" aria-label="Discount percent" />
               <div className="flex justify-between text-sm mt-1">

@@ -12,13 +12,32 @@ interface SessionState {
   switchAccount: (userId: string) => void;
 }
 
+const STORAGE_KEY = 'oe-console-account';
+
+function initialAccount(): DemoAccount {
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const found = demoAccounts.find((a) => a.userId === stored);
+    if (found) return found;
+  } catch {
+    // storage unavailable; fall through to the default account
+  }
+  return demoAccounts[0]!;
+}
+
 export const useSession = create<SessionState>((set) => ({
-  account: demoAccounts[0]!,
+  account: initialAccount(),
   today: '2026-06-30',
   switchAccount: (userId) =>
     set(() => {
       const next = demoAccounts.find((a) => a.userId === userId);
-      return next ? { account: next } : {};
+      if (!next) return {};
+      try {
+        window.localStorage.setItem(STORAGE_KEY, userId);
+      } catch {
+        // storage unavailable; the switch still applies for this session
+      }
+      return { account: next };
     }),
 }));
 
