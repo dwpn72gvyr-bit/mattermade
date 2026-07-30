@@ -16,37 +16,37 @@ export interface DemoAccount {
 
 export const demoAccounts: DemoAccount[] = [
   {
-    userId: 'user-mei', personId: 'person-mei', name: 'Mei Chen', shortName: 'Mei',
+    userId: 'usr-mei', personId: 'per-mei', name: 'Mei Chen', shortName: 'Mei',
     title: 'Designer', roles: ['team_member'], leadProjectIds: [], reportPersonIds: [],
   },
   {
-    userId: 'user-ryan', personId: 'person-ryan', name: 'Ryan Tan', shortName: 'Ryan',
+    userId: 'usr-ryan', personId: 'per-ryan', name: 'Ryan Tan', shortName: 'Ryan',
     title: 'Founder & Executive Creative Director',
     roles: ['team_member', 'project_lead', 'leadership', 'super_admin'],
-    leadProjectIds: ['prj-c', 'prj-e', 'prj-kite'], reportPersonIds: [],
+    leadProjectIds: ['prj-a', 'prj-c', 'prj-e', 'prj-f', 'prj-i', 'prj-k'], reportPersonIds: [],
   },
   {
-    userId: 'user-priya', personId: 'person-priya', name: 'Priya Nair', shortName: 'Priya',
-    title: 'Account Director', roles: ['team_member', 'people_manager'],
-    leadProjectIds: [], reportPersonIds: ['person-mei', 'person-daniel', 'person-weiming'],
+    userId: 'usr-priya', personId: 'per-priya', name: 'Priya Nair', shortName: 'Priya',
+    title: 'Account Director', roles: ['team_member', 'people_manager', 'project_lead'],
+    leadProjectIds: ['prj-j', 'prj-l'], reportPersonIds: ['per-mei', 'per-daniel', 'per-weiming'],
   },
   {
-    userId: 'user-daniel', personId: 'person-daniel', name: 'Daniel Ong', shortName: 'Daniel',
+    userId: 'usr-daniel', personId: 'per-daniel', name: 'Daniel Ong', shortName: 'Daniel',
     title: 'Associate Creative Producer', roles: ['team_member', 'finance_admin'],
     leadProjectIds: [], reportPersonIds: [],
   },
   {
-    userId: 'user-sofia', personId: 'person-sofia', name: 'Sofia Lim', shortName: 'Sofia',
-    title: 'Creative Director', roles: ['team_member', 'leadership'],
-    leadProjectIds: [], reportPersonIds: [],
+    userId: 'usr-sofia', personId: 'per-sofia', name: 'Sofia Lim', shortName: 'Sofia',
+    title: 'Creative Director', roles: ['team_member', 'leadership', 'project_lead'],
+    leadProjectIds: ['prj-b', 'prj-d', 'prj-h'], reportPersonIds: [],
   },
   {
-    userId: 'user-weiming', personId: 'person-weiming', name: 'Wei Ming Chua', shortName: 'Wei Ming',
+    userId: 'usr-weiming', personId: 'per-weiming', name: 'Wei Ming Chua', shortName: 'Wei Ming',
     title: 'Account Manager', roles: ['team_member', 'project_lead'],
-    leadProjectIds: ['prj-b'], reportPersonIds: [],
+    leadProjectIds: ['prj-g'], reportPersonIds: [],
   },
   {
-    userId: 'user-aiko', personId: 'collab-aiko', name: 'Aiko Tanaka', shortName: 'Aiko',
+    userId: 'usr-aiko', personId: 'col-aiko', name: 'Aiko Tanaka', shortName: 'Aiko',
     title: 'Motion Designer (OE Verse)', roles: ['external_contributor'],
     leadProjectIds: [], reportPersonIds: [], isExternal: true,
   },
