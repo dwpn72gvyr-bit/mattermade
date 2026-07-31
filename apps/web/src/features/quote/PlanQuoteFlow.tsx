@@ -106,11 +106,12 @@ export default function PlanQuoteFlow() {
       estHoursByRole: Object.fromEntries(Object.entries(hoursByRole).map(([r, h]) => [r, h * f])),
     });
     const price = (i: PricingInputs) => priceLadder(i).recommendedPriceMinor;
+    const months = (n: number) => Math.max(1, n);
     return [
-      buildScenario('best', 'Best', scale(0.85), price(scale(0.85)), durationMonths - 1),
-      buildScenario('expected', 'Expected', inputs, discounted.quotedPriceMinor, durationMonths),
-      buildScenario('high_effort', 'High-effort', scale(1.25), discounted.quotedPriceMinor, durationMonths + 2),
-      buildScenario('reduced_scope', 'Reduced-scope', scale(0.7), price(scale(0.7)), durationMonths - 2),
+      buildScenario('best', 'Best', scale(0.85), price(scale(0.85)), months(durationMonths - 1)),
+      buildScenario('expected', 'Expected', inputs, discounted.quotedPriceMinor, months(durationMonths)),
+      buildScenario('high_effort', 'High-effort', scale(1.25), discounted.quotedPriceMinor, months(durationMonths + 2)),
+      buildScenario('reduced_scope', 'Reduced-scope', scale(0.7), price(scale(0.7)), months(durationMonths - 2)),
     ];
   }, [inputs, hoursByRole, discounted.quotedPriceMinor, durationMonths]);
 
@@ -126,6 +127,13 @@ export default function PlanQuoteFlow() {
         lede="One language from promise to proof: these phases, roles and hours become the structure the project is delivered and measured against."
       />
 
+      {accepted && (
+        <Banner tone="info" className="mb-4">
+          This quotation is accepted and its baseline is frozen. The steps below are a live
+          modelling sandbox for what-if exploration; the binding figures are the issued totals
+          on the approval step.
+        </Banner>
+      )}
       <nav className="flex gap-1 mb-6 flex-wrap" aria-label="Estimate steps">
         {STEPS.map((s, i) => (
           <button
@@ -149,7 +157,7 @@ export default function PlanQuoteFlow() {
         <Card className="max-w-2xl space-y-3">
           <h2 className="display text-lg">Particulars</h2>
           <div className="grid grid-cols-2 gap-4">
-            <Stat label="Client" value={record?.project ? 'Harbourline Trust' : '—'} />
+            <Stat label="Client" value={record?.clientName ?? '—'} />
             <Stat label="Service line" value={record?.project?.serviceLine.replace(/_/g, ' ') ?? '—'} />
             <Stat label="Window" value={`${record?.project?.startDate ?? ''} → ${record?.project?.targetEndDate ?? ''}`} />
             <Stat
@@ -160,7 +168,7 @@ export default function PlanQuoteFlow() {
                     type="number" min={1} max={24}
                     className="w-16 border border-line rounded-financial bg-raised px-2 py-1 tabular"
                     value={durationMonths}
-                    onChange={(e) => setDurationMonths(Number(e.target.value) || 1)}
+                    onChange={(e) => setDurationMonths(Math.max(1, Number(e.target.value) || 1))}
                     aria-label="Duration in months"
                   />
                   months
@@ -221,7 +229,7 @@ export default function PlanQuoteFlow() {
                             onChange={(e) =>
                               setEffort((prev) => ({
                                 ...prev,
-                                [phase]: { ...prev[phase], [r.key]: Number(e.target.value) || 0 },
+                                [phase]: { ...prev[phase], [r.key]: Math.max(0, Number(e.target.value) || 0) },
                               }))
                             }
                           />
@@ -375,10 +383,17 @@ export default function PlanQuoteFlow() {
       {step === 6 && (
         <Card className="max-w-2xl space-y-4">
           <h2 className="display text-lg">Approval</h2>
+          {q && (
+            <div className="grid grid-cols-3 gap-4 border-b border-line pb-4">
+              <Stat label={`Issued v${q.version} subtotal`} value={fmtMoneyWhole(q.subtotalMinor)} />
+              <Stat label="Issued GST" value={fmtMoneyWhole(q.gstMinor)} />
+              <Stat label="Issued total" value={fmtMoneyWhole(q.totalMinor)} sub={q.status} />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
-            <Stat label="Quoted fee (excl GST)" value={fmtMoneyWhole(discounted.quotedPriceMinor)} />
+            <Stat label="Modelled fee (excl GST)" value={fmtMoneyWhole(discounted.quotedPriceMinor)} />
             <Stat label="GST 9%" value={fmtMoneyWhole(Math.round(discounted.quotedPriceMinor * gst))} />
-            <Stat label="Margin at quote" value={fmtPct(discounted.grossMargin)} tone={discounted.grossMargin < 0.2 ? 'critical' : 'default'} />
+            <Stat label="Margin at modelled fee" value={fmtPct(discounted.grossMargin)} tone={discounted.grossMargin < 0.2 ? 'critical' : 'default'} />
             <Stat label="Estimated hours" value={`${ladder.estHours}h`} />
           </div>
           {breach && (

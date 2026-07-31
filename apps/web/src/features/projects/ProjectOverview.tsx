@@ -240,8 +240,8 @@ export default function ProjectOverview() {
           <div className="grid md:grid-cols-4 gap-4">
             <Card><Stat label="Gross margin" value={fmtPct(m.grossMargin)} tone={m.grossMargin < 0 ? 'critical' : 'default'} sub="true margin, target 50 to 60%" /></Card>
             <Card><Stat label="Third-party margin" value={fmtPct(m.thirdPartyMargin)} sub="legacy lens, target 60 to 70%" /></Card>
-            <Card><Stat label="Profit per internal hour" value={(m.profitPerInternalHourMinor / 100).toFixed(2)} tone={m.profitPerInternalHourMinor < 0 ? 'critical' : 'default'} sub="F8" /></Card>
-            <Card><Stat label="Effective hourly revenue" value={(m.effectiveHourlyRevenueMinor / 100).toFixed(2)} sub="F7" /></Card>
+            <Card><Stat label="Profit per internal hour" value={`$${(m.profitPerInternalHourMinor / 100).toFixed(2)}`} tone={m.profitPerInternalHourMinor < 0 ? 'critical' : 'default'} sub="F8" /></Card>
+            <Card><Stat label="Effective hourly revenue" value={`$${(m.effectiveHourlyRevenueMinor / 100).toFixed(2)}`} sub="F7" /></Card>
           </div>
           {m.thirdPartyMargin > 0.4 && m.grossMargin < 0 && (
             <Banner tone="critical">

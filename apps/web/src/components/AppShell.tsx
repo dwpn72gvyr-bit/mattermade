@@ -2,7 +2,7 @@
 // subtractive (R6 note in CLAUDE.md): modules a user cannot access are absent,
 // never greyed out.
 
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession } from '../stores/session';
 import { demoAccounts } from '../api/demoAccounts';
@@ -86,10 +86,22 @@ export default function AppShell() {
   const today = useSession((s) => s.today);
   const navigate = useNavigate();
   const groups = navFor(account.roles, account.isExternal);
+  const [navOpen, setNavOpen] = useState(false);
 
   return (
     <div className="min-h-screen flex bg-paper">
-      <aside className="w-60 shrink-0 border-r border-line bg-raised/60 flex flex-col" aria-label="Main navigation">
+      {navOpen && (
+        <button
+          className="fixed inset-0 bg-ink/30 z-30 lg:hidden"
+          aria-label="Close navigation"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <aside
+        className={`w-60 shrink-0 border-r border-line bg-raised flex-col z-40
+          ${navOpen ? 'flex fixed inset-y-0 left-0' : 'hidden'} lg:flex lg:static lg:bg-raised/60`}
+        aria-label="Main navigation"
+      >
         <div className="px-5 py-4 border-b border-line">
           <div className="display text-lg leading-tight">OuterEdit</div>
           <div className="text-xs text-ink-faint tracking-wide uppercase mt-0.5">Studio Console</div>
@@ -104,6 +116,7 @@ export default function AppShell() {
                     <NavLink
                       to={item.to}
                       end={item.to === '/' || item.to === '/projects' || item.to === '/company'}
+                      onClick={() => setNavOpen(false)}
                       className={({ isActive }) =>
                         `block px-5 py-1.5 text-base transition-colors duration-settle ${
                           isActive
@@ -127,13 +140,23 @@ export default function AppShell() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="h-14 border-b border-line bg-raised/80 backdrop-blur flex items-center justify-between px-6 sticky top-0 z-20">
-          <div className="text-sm text-ink-muted">
-            Signed in as <span className="text-ink font-medium">{account.name}</span>
-            <span className="text-ink-faint"> · {account.title}</span>
+        <header className="h-14 border-b border-line bg-raised/80 backdrop-blur flex items-center justify-between gap-2 px-3 lg:px-6 sticky top-0 z-20">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              className="lg:hidden border border-line rounded-financial px-2.5 py-1.5 text-base"
+              aria-label="Open navigation"
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen(true)}
+            >
+              ☰
+            </button>
+            <div className="text-sm text-ink-muted truncate hidden sm:block">
+              Signed in as <span className="text-ink font-medium">{account.name}</span>
+              <span className="text-ink-faint hidden md:inline"> · {account.title}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <label htmlFor="role-switcher" className="text-sm text-ink-muted">
+          <div className="flex items-center gap-2 shrink-0">
+            <label htmlFor="role-switcher" className="text-sm text-ink-muted hidden sm:block">
               View as
             </label>
             <select
@@ -153,7 +176,7 @@ export default function AppShell() {
             </select>
           </div>
         </header>
-        <main className="flex-1 max-w-content w-full mx-auto px-6 py-6">
+        <main className="flex-1 max-w-content w-full mx-auto px-3 sm:px-6 py-6 min-w-0">
           <Outlet />
         </main>
       </div>

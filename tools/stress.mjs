@@ -135,9 +135,14 @@ await switchTo('usr-ryan');
   const lockCount = await lockButtons.count();
   if (lockCount > 0) {
     await lockButtons.last().click();
+    await page.waitForTimeout(300);
+    const confirmVisible = /Locking snapshots every entry's cost/.test(await bodyText());
+    check('Ryan', 'locking asks for confirmation first', confirmVisible);
+    await page.getByRole('button', { name: /^Lock \w+ \d{4}$/ }).click();
     await page.waitForTimeout(600);
     check('Ryan', 'locking an open green month succeeds', /Reopen/.test(await bodyText()));
   } else {
+    check('Ryan', 'locking asks for confirmation first', false, 'no lock button');
     check('Ryan', 'locking an open green month succeeds', false, 'no lock button');
   }
   // Reopen with mandatory reason.

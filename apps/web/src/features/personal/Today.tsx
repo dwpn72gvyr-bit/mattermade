@@ -56,9 +56,13 @@ export default function Today() {
     mutationFn: (id: string) => deleteEntry(account, id),
     onSuccess: invalidate,
   });
+  const [copyNote, setCopyNote] = useState<string | null>(null);
   const copyYesterday = useMutation({
     mutationFn: () => copyDay(account, addDays(date, -1), date),
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      setCopyNote(result.skipped ? 'That day is already fully mapped, so nothing was copied.' : null);
+      invalidate();
+    },
   });
 
   const d = day.data;
@@ -78,9 +82,11 @@ export default function Today() {
         lede={
           scheduled === 0
             ? 'No scheduled hours on this day. Anything you record is for your own picture.'
-            : pct >= 1
-              ? "That's your day mapped. Thanks for keeping the picture whole."
-              : mapped > 0
+            : pct > 1.05
+              ? `You've mapped ${(mapped / 60).toFixed(1).replace(/\.0$/, '')} hours against ${scheduled / 60} scheduled. If that's real overtime it counts as effort; if it's a slip, two taps fix it.`
+              : pct >= 1
+                ? "That's your day mapped. Thanks for keeping the picture whole."
+                : mapped > 0
                 ? `You've mapped ${(mapped / 60).toFixed(1).replace(/\.0$/, '')} of ${scheduled / 60} hours. The rest can wait until you have a minute.`
                 : 'Two minutes, and the picture is whole.'
         }
@@ -98,6 +104,9 @@ export default function Today() {
           This month is closed, so these entries are preserved as they were. You can request an
           adjustment and finance will take it from there.
         </Banner>
+      )}
+      {copyNote && (
+        <Banner tone="info" className="mb-4">{copyNote}</Banner>
       )}
       {save.isError && (
         <Banner tone="critical" className="mb-4">
@@ -185,7 +194,9 @@ export default function Today() {
                 ? 'Not a scheduled day'
                 : remaining > 0
                   ? `${minutesLabel(remaining)} unmapped`
-                  : 'Fully mapped'}
+                  : pct > 1.05
+                    ? `${minutesLabel(mapped - scheduled)} beyond schedule`
+                    : 'Fully mapped'}
             </div>
             {d?.publicHoliday && <StatusChip tone="info">{d.publicHoliday}</StatusChip>}
           </Card>

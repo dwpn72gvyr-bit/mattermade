@@ -35,9 +35,11 @@ export default function Insights() {
           <Card temp="personal">
             <p className="text-base leading-relaxed">
               Your deepest work happened on days with one project, not three. You had{' '}
-              <span className="tabular font-medium">{i.focusDays}</span> single-project days and{' '}
-              <span className="tabular font-medium">{i.fragmentedDays}</span> days split across
-              three or more. Something to protect where you can.
+              <span className="tabular font-medium">{i.focusDays}</span> single-project{' '}
+              {i.focusDays === 1 ? 'day' : 'days'} and{' '}
+              <span className="tabular font-medium">{i.fragmentedDays}</span>{' '}
+              {i.fragmentedDays === 1 ? 'day' : 'days'} split across three or more. Something to
+              protect where you can.
             </p>
           </Card>
           <Card temp="personal">

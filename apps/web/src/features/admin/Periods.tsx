@@ -13,11 +13,12 @@ export default function Periods() {
   const qc = useQueryClient();
   const periods = useQuery({ queryKey: ['periods', account.userId], queryFn: () => getPeriods(account) });
   const [reopenTarget, setReopenTarget] = useState<string | null>(null);
+  const [lockTarget, setLockTarget] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
   const lock = useMutation({
     mutationFn: (ym: string) => lockPeriod(account, ym),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['periods'] }),
+    onSuccess: () => { setLockTarget(null); qc.invalidateQueries({ queryKey: ['periods'] }); },
   });
   const reopen = useMutation({
     mutationFn: ({ ym, why }: { ym: string; why: string }) => reopenPeriod(account, ym, why),
@@ -58,7 +59,7 @@ export default function Periods() {
             <Td num>{fmtMoneyWhole(p.tieOutDetail.differenceMinor)}</Td>
             <Td>
               {p.status !== 'locked' && isFinance && (
-                <Button size="sm" variant="secondary" onClick={() => lock.mutate(p.yearMonth)} disabled={p.tieOut === 'red'}>
+                <Button size="sm" variant="secondary" onClick={() => setLockTarget(p.yearMonth)} disabled={p.tieOut === 'red'}>
                   Lock
                 </Button>
               )}
@@ -69,6 +70,23 @@ export default function Periods() {
           </tr>
         ))}
       </LedgerTable>
+
+      {lockTarget && (
+        <div className="mt-5 border border-line rounded-financial bg-raised p-4 max-w-xl">
+          <h2 className="display text-lg mb-2">Lock {fmtPeriod(lockTarget)}</h2>
+          <p className="text-sm text-ink-muted mb-3">
+            Locking snapshots every entry's cost and closes the month to edits. Corrections after
+            this become dated adjustments.
+            {lockTarget === '2026-06' && ' This month is still running; locking it now will close it early.'}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={() => lock.mutate(lockTarget)}>
+              Lock {fmtPeriod(lockTarget)}
+            </Button>
+            <Button variant="quiet" onClick={() => setLockTarget(null)}>Not yet</Button>
+          </div>
+        </div>
+      )}
 
       {reopenTarget && (
         <div className="mt-5 border border-critical/40 rounded-financial bg-critical/5 p-4 max-w-xl">

@@ -157,6 +157,21 @@ export function saveEntry(account: DemoAccount, input: SaveEntryInput) {
       return entryView(existing);
     }
 
+    const existing = db.timeEntries.find(
+      (e) =>
+        e.personId === account.personId &&
+        e.date === input.date &&
+        e.activityId === input.activityId &&
+        e.projectId === input.projectId &&
+        e.phaseId === input.phaseId,
+    );
+    if (existing) {
+      existing.minutes += input.minutes;
+      existing.updatedAt = `${FIXTURE_TODAY}T12:00:00Z`;
+      existing.updatedBy = account.userId;
+      return entryView(existing);
+    }
+
     const entry: TimeEntry = {
       id: newId('te'),
       createdAt: `${FIXTURE_TODAY}T12:00:00Z`,
@@ -192,6 +207,14 @@ export function deleteEntry(account: DemoAccount, entryId: string) {
 
 export function copyDay(account: DemoAccount, from: CalendarDate, to: CalendarDate) {
   return call('personal.copyDay', () => {
+    const scheduled = scheduledMinutes(account.personId, to);
+    const alreadyMapped = db.timeEntries
+      .filter((e) => e.personId === account.personId && e.date === to)
+      .filter((e) => ACTIVITY_BY_ID[e.activityId]!.scope !== 'personal')
+      .reduce((s, e) => s + e.minutes, 0);
+    if (scheduled > 0 && alreadyMapped >= scheduled) {
+      return { skipped: true as const, entries: [] };
+    }
     const source = db.timeEntries.filter(
       (e) => e.personId === account.personId && e.date === from,
     );
@@ -206,7 +229,7 @@ export function copyDay(account: DemoAccount, from: CalendarDate, to: CalendarDa
         createdBy: account.userId,
       }));
     db.timeEntries.push(...created);
-    return created.map(entryView);
+    return { skipped: false as const, entries: created.map(entryView) };
   });
 }
 
@@ -334,6 +357,7 @@ export interface PortfolioRow {
 
 export function getPortfolio(account: DemoAccount) {
   return call('projects.portfolio', () => {
+    if (account.isExternal) throw new Error('not_allowed'); // hard wall (§7.2)
     const actor = actorFor(account);
     const seesAll = ['leadership', 'finance_admin', 'ops_admin', 'super_admin'].some((r) =>
       account.roles.includes(r),
@@ -368,6 +392,7 @@ export function getPortfolio(account: DemoAccount) {
 
 export function getProject(account: DemoAccount, projectId: string) {
   return call('projects.detail', () => {
+    if (account.isExternal) throw new Error('not_allowed'); // hard wall (§7.2)
     const actor = actorFor(account);
     const p = db.projects.find((x) => x.id === projectId);
     if (!p) throw new Error('not_found');
@@ -574,6 +599,7 @@ export function getDirectory(account: DemoAccount) {
 
 export function getPerson(account: DemoAccount, personId: string) {
   return call('people.person', () => {
+    if (account.isExternal) throw new Error('not_allowed'); // hard wall (§7.2)
     const actor = actorFor(account);
     const person = db.people.find((p) => p.id === personId);
     if (!person) throw new Error('not_found');
@@ -665,10 +691,14 @@ export function getQuotations(account: DemoAccount) {
       account.roles.includes(r),
     );
     if (!allowed) throw new Error('not_allowed');
-    return db.quotations.map((q) => ({
-      quotation: q,
-      project: db.projects.find((p) => p.id === q.projectId),
-    }));
+    return db.quotations.map((q) => {
+      const project = db.projects.find((p) => p.id === q.projectId);
+      return {
+        quotation: q,
+        project,
+        clientName: project ? db.clients.find((c) => c.id === project.clientId)?.name : undefined,
+      };
+    });
   });
 }
 

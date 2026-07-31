@@ -38,7 +38,15 @@ export default function Portal() {
                 <StatusChip tone={['active', 'committed'].includes(a.status) ? 'positive' : 'neutral'}>{a.status}</StatusChip>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <Stat label="Your fee" value={fmtMoneyWhole(a.feeMinor ?? a.rateMinor ?? 0, a.currency)} sub={a.model === 'hourly' ? 'per hour' : a.model === 'monthly_retainer' ? 'per month' : 'agreed fee'} />
+                <Stat
+                  label="Your fee"
+                  value={fmtMoneyWhole(
+                    a.feeMinor ?? a.rateMinor ??
+                      (a.milestones ?? []).reduce((s, m) => s + m.amountMinor, 0),
+                    a.currency,
+                  )}
+                  sub={a.model === 'hourly' ? 'per hour' : a.model === 'monthly_retainer' ? 'per month' : a.model === 'milestone' ? 'across milestones' : 'agreed fee'}
+                />
                 <Stat label="Window" value={`${fmtDate(a.startDate)}${a.endDate ? ` → ${fmtDate(a.endDate)}` : ''}`} />
                 <Stat label="Expenses" value={a.expensesReimbursable ? 'Reimbursable' : 'Included'} />
               </div>

@@ -250,19 +250,20 @@ export function CompletionRing(props: { pct: number; size?: number; label: strin
   const size = props.size ?? 64;
   const r = (size - 8) / 2;
   const c = 2 * Math.PI * r;
-  const pct = Math.min(1, Math.max(0, props.pct));
+  const raw = Math.max(0, props.pct);
+  const pct = Math.min(1, raw);
   return (
     <svg width={size} height={size} role="img" aria-label={props.label}>
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1EDE6" strokeWidth="6" />
       <circle
         cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={pct >= 1 ? '#4E7A52' : '#3D5A4C'} strokeWidth="6" strokeLinecap="round"
+        stroke={raw > 1.05 ? '#B98A2E' : pct >= 1 ? '#4E7A52' : '#3D5A4C'} strokeWidth="6" strokeLinecap="round"
         strokeDasharray={c} strokeDashoffset={c * (1 - pct)}
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
         className="ring-progress"
       />
       <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="tabular" fontSize={size / 4.6} fill="#2B2B2B">
-        {Math.round(pct * 100)}%
+        {Math.round(raw * 100)}%
       </text>
     </svg>
   );

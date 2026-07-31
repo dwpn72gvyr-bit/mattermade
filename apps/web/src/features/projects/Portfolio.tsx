@@ -126,7 +126,7 @@ export default function Portfolio() {
               <Td num>
                 {'maskedAs' in r.profitPerHour ? <Masked as={r.profitPerHour.maskedAs} /> : (
                   <span className={r.profitPerHour.value < 0 ? 'text-critical' : ''}>
-                    {(r.profitPerHour.value / 100).toFixed(2)}
+                    {'$'}{(r.profitPerHour.value / 100).toFixed(2)}
                   </span>
                 )}
               </Td>

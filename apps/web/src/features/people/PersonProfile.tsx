@@ -81,9 +81,9 @@ export default function PersonProfile() {
             {d.costRates.map((r) => (
               <tr key={r.id}>
                 <Td>{fmtDate(r.effectiveFrom)}{r.effectiveTo ? ` → ${fmtDate(r.effectiveTo)}` : ' → present'}</Td>
-                <Td num>{(r.paidHourRateMinor / 100).toFixed(2)}</Td>
-                <Td num>{(r.availableHourRateMinor / 100).toFixed(2)}</Td>
-                <Td num>{(r.productiveHourRateMinor / 100).toFixed(2)}</Td>
+                <Td num>{'$'}{(r.paidHourRateMinor / 100).toFixed(2)}</Td>
+                <Td num>{'$'}{(r.availableHourRateMinor / 100).toFixed(2)}</Td>
+                <Td num>{'$'}{(r.productiveHourRateMinor / 100).toFixed(2)}</Td>
               </tr>
             ))}
           </LedgerTable>
