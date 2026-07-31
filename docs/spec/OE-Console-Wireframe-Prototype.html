@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OE Agency Intelligence Console — Interactive Wireframe (Low-Fi)</title>
+<style>
+  :root{--ink:#2b2b2b;--mut:#8a8a8a;--line:#d9d4cc;--bg:#faf8f4;--card:#ffffff;--amber:#b98a2e;--red:#a5432e;--green:#4e7a52;--acc:#3d5a4c;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;}
+  body{background:var(--bg);color:var(--ink);font-size:13px;line-height:1.5;}
+  #app{display:flex;min-height:100vh;}
+  aside{width:180px;border-right:1px solid var(--line);padding:14px 0;background:var(--card);flex-shrink:0;}
+  aside .logo{font-weight:700;padding:0 16px 12px;border-bottom:1px solid var(--line);margin-bottom:10px;letter-spacing:.5px;}
+  aside a{display:block;padding:7px 16px;color:var(--ink);text-decoration:none;border-left:3px solid transparent;}
+  aside a.active{border-left-color:var(--acc);background:#f1ede6;font-weight:700;}
+  aside a:hover{background:#f5f2ec;}
+  main{flex:1;min-width:0;}
+  .topbar{display:flex;gap:10px;align-items:center;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--card);flex-wrap:wrap;}
+  .topbar .search{flex:1;min-width:140px;border:1px dashed var(--line);padding:5px 10px;color:var(--mut);}
+  select{padding:5px 8px;border:1px solid var(--line);background:#fff;font:inherit;}
+  .content{padding:20px 22px;max-width:1080px;}
+  h1{font-size:17px;margin-bottom:2px;} .crumb{color:var(--mut);font-size:11px;margin-bottom:14px;}
+  .cards{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0;}
+  .card{background:var(--card);border:1px solid var(--line);padding:12px 14px;flex:1;min-width:200px;}
+  .card h3{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);margin-bottom:6px;}
+  .big{font-size:20px;font-weight:700;}
+  table{width:100%;border-collapse:collapse;background:var(--card);margin:10px 0;}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top;}
+  th{background:#f1ede6;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .bar{background:#eee;border:1px solid var(--line);height:12px;position:relative;min-width:90px;}
+  .bar i{position:absolute;left:0;top:0;bottom:0;background:#9aa89e;}
+  .bar em{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);}
+  .amber{color:var(--amber);} .red{color:var(--red);} .green{color:var(--green);} .mut{color:var(--mut);}
+  .masked{color:var(--mut);letter-spacing:2px;} .chip{display:inline-block;border:1px solid var(--line);padding:1px 8px;border-radius:10px;font-size:11px;margin:2px 3px 2px 0;background:#fff;cursor:pointer;}
+  .note{border-left:3px solid var(--acc);background:#f1ede6;padding:8px 12px;margin:12px 0;font-size:12px;}
+  .warn{border-left-color:var(--amber);} .risk{border-left-color:var(--red);}
+  .btn{display:inline-block;border:1px solid var(--ink);background:#fff;padding:5px 12px;cursor:pointer;font:inherit;margin:4px 6px 4px 0;}
+  .btn.primary{background:var(--ink);color:#fff;}
+  .ring{width:64px;height:64px;border-radius:50%;background:conic-gradient(var(--acc) 0 81%, #e5e0d8 81% 100%);display:flex;align-items:center;justify-content:center;}
+  .ring b{background:var(--card);width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;}
+  .row-entry{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap;}
+  .row-entry select,.row-entry .dur{border:1px solid var(--line);padding:4px 6px;background:#fff;}
+  .flex{display:flex;gap:16px;flex-wrap:wrap;} .flex>div{flex:1;min-width:260px;}
+  .ladder td{border:none;border-bottom:1px dashed var(--line);}
+  .tag{font-size:10px;border:1px solid var(--line);padding:0 6px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);}
+  .wf{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-top:26px;border-top:1px dashed var(--line);padding-top:8px;}
+  @media(max-width:760px){aside{display:none}.mobiletabs{display:flex!important}}
+  .mobiletabs{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);}
+  .mobiletabs a{flex:1;text-align:center;padding:9px 0;color:var(--ink);text-decoration:none;font-size:11px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="nav"></aside>
+  <main>
+    <div class="topbar">
+      <span class="tag">low-fi wireframe</span>
+      <div class="search">⌘K search projects, people, reports…</div>
+      <span>‹ Jul 2026 ▾ ›</span><span>🔔 <b id="bellct">2</b></span>
+      <label>Viewing as <select id="roleSel" onchange="setRole(this.value)">
+        <option value="member">Mei · Team member</option>
+        <option value="lead">Ryan · Lead + Leadership</option>
+        <option value="finance">Daniel · Finance admin</option>
+        <option value="leadership">Sofia · Leadership</option>
+      </select></label>
+    </div>
+    <div class="content" id="screen"></div>
+  </main>
+</div>
+<nav class="mobiletabs">
+  <a href="#" onclick="go('home')">Home</a><a href="#" onclick="go('today')">Time</a>
+  <a href="#" onclick="go('projects')">Projects</a><a href="#" onclick="go('more')">More</a>
+</nav>
+<script>
+const S={role:'member',screen:'home'};
+const NAV={
+ member:[['home','Home'],['today','My Time'],['week','My Week'],['insights','My Insights'],['projects','My Projects']],
+ lead:[['home','Home'],['today','My Time'],['week','My Week'],['insights','My Insights'],['projects','Projects'],['plan','Plan & Quote'],['cockpit','Company'],['portfolio','Portfolio'],['reports','Reports']],
+ finance:[['home','Home'],['today','My Time'],['projects','Projects'],['people','People'],['oev','OE Verse'],['costs','Company Costs'],['cockpit','Company'],['reports','Reports'],['admin','Admin']],
+ leadership:[['home','Home'],['today','My Time'],['projects','Projects'],['cockpit','Company'],['portfolio','Portfolio'],['reports','Reports']]
+};
+const mask=v=>`<span class="masked" title="Masked for your role (S1 sensitivity)">$ ·····</span>`;
+const money=v=>'$'+v.toLocaleString('en-SG');
+const can=p=>({member:['own'],lead:['own','projhealth','sell'],finance:['own','projhealth','sell','s1','s2'],leadership:['own','projhealth','sell','s2']})[S.role].includes(p);
+
+const PROJECTS=[
+ {n:'Brand Sprint · Meridian',fee:12000,cost:4850,gp:7150,gm:'59.6%',ph:'$110.00',risk:'●',cls:'green'},
+ {n:'SYS Rebranding',fee:70000,cost:44083,gp:25918,gm:'37.0%',ph:'$58',risk:'●',cls:'green'},
+ {n:'Night Festival 2027',fee:420000,cost:367740,gp:52260,gm:'12.4%',ph:'$29.53',risk:'◐',cls:'amber'},
+ {n:'Placemaking SP',fee:250000,cost:256200,gp:-6200,gm:'−2.5%',ph:'−$3.76',risk:'⚠',cls:'red'}];
+
+const SCREENS={
+home(){return `<h1>Good evening, ${{member:'Mei',lead:'Ryan',finance:'Daniel',leadership:'Sofia'}[S.role]} ✳</h1>
+ <div class="crumb">Home</div>
+ <div class="cards">
+  <div class="card"><h3>Today</h3><div style="display:flex;gap:14px;align-items:center"><div class="ring"><b>6.5/8h</b></div>
+   <div>You've mapped 6.5 of your 8 hours.<br><button class="btn primary" onclick="go('today')">Finish my day →</button></div></div></div>
+  <div class="card"><h3>My projects · hrs this wk</h3>▪ SYS Rebranding — 11.5h<br>▪ Night Festival — 6.0h<br>▪ Company · BD — 2.5h</div>
+  <div class="card"><h3>Coming up</h3>▪ Science Park install — next wk<br>▪ Leave: Friday approved ✓</div>
+ </div>
+ <div class="note">✨ This week you had 2 uninterrupted maker mornings — one more than last week. <a href="#" onclick="go('insights')">See my week →</a></div>
+ ${S.role!=='member'?`<div class="note warn">⚑ Needs attention: <a href="#" onclick="go('project')">Night Festival hours pacing</a>${can('s2')?' · Placemaking SP forecast −2.5%':''}</div>`:''}
+ <div class="wf">Wireframe B1 · personal home · primary action: finish my day</div>`;},
+
+today(){return `<h1>Today · Tue 29 Jul</h1><div class="crumb">My Time › Today</div>
+ <p><span class="chip">Copy yesterday</span><span class="chip">★ SYS · Identity design</span><span class="chip">★ NF · Programme dev</span><span class="chip">★ Studio meeting</span></p>
+ ${['SYS Rebranding|Identity design|Design|2.5h','Internal|Studio meeting|—|0.5h','Night Festival|Programme dev|Workshop|3.0h','Lunch <span class=tag>contextual · not costed</span>|—|—|0.5h'].map(r=>{const c=r.split('|');
+  return `<div class="row-entry"><select><option>${c[0]}</option></select><select><option>${c[1]}</option></select><select><option>${c[2]}</option></select>
+  <span class="dur">− ${c[3]} +</span> <span class="mut">✎</span></div>`;}).join('')}
+ <div class="row-entry"><button class="btn">+ Add row</button></div>
+ <div class="bar" style="max-width:340px"><i style="width:81%"></i></div>
+ <p class="mut">mapped 6.5 / 8h — the rest can wait until you have a minute.</p>
+ <button class="btn">Save draft</button><button class="btn primary" onclick="alert('That\\'s your day mapped. Thanks for keeping the picture whole.')">Complete day ✓</button>
+ <div class="wf">Wireframe B2 · row model (primary) · duration-first · contextual rows excluded from cost</div>`;},
+
+week(){return `<h1>My Week</h1><div class="crumb">My Time › Week of 27 Jul</div>
+ <table><tr><th></th><th class=num>Mon</th><th class=num>Tue</th><th class=num>Wed</th><th class=num>Thu</th><th class=num>Fri</th><th class=num>wk</th></tr>
+ <tr><td>expected</td><td class=num>8</td><td class=num>8</td><td class=num>8</td><td class=num>8</td><td class=num>8</td><td class=num>40</td></tr>
+ <tr><td>mapped</td><td class=num>8</td><td class=num>6.5</td><td class=num class="mut">░</td><td class=num class="mut">░</td><td class=num class="mut">leave ✓</td><td class=num>14.5</td></tr>
+ <tr><td>SYS Rebranding</td><td class=num>4</td><td class=num>2.5</td><td></td><td></td><td></td><td class=num>6.5</td></tr>
+ <tr><td>Night Festival</td><td class=num>2.5</td><td class=num>3</td><td></td><td></td><td></td><td class=num>5.5</td></tr>
+ <tr><td>Company</td><td class=num>1.5</td><td class=num>1</td><td></td><td></td><td></td><td class=num>2.5</td></tr></table>
+ <p class="mut">Tuesday still has 1.5 hours unmapped. Two taps and it's done.</p>
+ <button class="btn">Copy last week</button>
+ <div class="wf">Wireframe B3 · weekly grid · gaps are gaps, never failures</div>`;},
+
+insights(){return `<h1>My Insights <span class="tag">only you can see this</span></h1><div class="crumb">Personal › Insights</div>
+ <div class="flex"><div class="card"><h3>Your week in shape</h3>focus ▓▓▓▓▓▓ 62%<br>meetings ▓▓▓ 27%<br>company ▓ 11%<br><span class="mut">Context switches: 9 (↓3 from last week)</span></div>
+ <div class="card"><h3>Project mix · 4 wks</h3>SYS ▓▓▓▓▓ 48%<br>Night Fest ▓▓▓ 31%<br>Company ▓▓ 21%<br><span class="mut">Next week ~85% planned</span></div></div>
+ <div class="note">✳ Your deepest work this month happened on days with one project, not three. Something to protect where you can. <span class="chip">Not now</span><span class="chip">Try a maker block</span></div>
+ <div class="wf">Wireframe B4 · private insights · no rankings, no comparisons, no self-profitability</div>`;},
+
+projects(){return `<h1>${S.role==='member'?'My Projects':'Project Portfolio'}</h1><div class="crumb">Projects</div>
+ <p class="mut">filters: Status ▾ · Client ▾ · Service line ▾ · Lead ▾ &nbsp; <span class="chip">Saved view: Active</span></p>
+ <table><tr><th>Project</th><th>Status</th><th class=num>${S.role==='member'?'my hrs wk':'hours health'}</th><th class=num>${can('projhealth')?'budget health':''}</th><th>risk</th></tr>
+ <tr onclick="go('project')" style="cursor:pointer"><td><u>SYS Rebranding</u></td><td>Active</td><td class=num>54% <span class="mut">vs 55% ⏱</span></td><td class=num>${can('projhealth')?'61% used ⚠':''}</td><td>● amber</td></tr>
+ <tr><td>Night Festival 2027</td><td>Active</td><td class=num>48% vs 40% ⏱</td><td class=num>${can('projhealth')?'52% used':''}</td><td>◐ watch</td></tr>
+ <tr><td>Brand Sprint · Meridian</td><td>Completed</td><td class=num>✓</td><td class=num>${can('projhealth')?'closed':''}</td><td>●</td></tr>
+ <tr><td>Placemaking SP</td><td>Completed</td><td class=num>183% ⚠</td><td class=num>${can('projhealth')?'over':''}</td><td>⚠</td></tr></table>
+ <div class="wf">Wireframe · portfolio · member sees own hours only; financial columns appear with rights</div>`;},
+
+project(){return `<h1>SYS Rebranding <span class="tag">active</span></h1>
+ <div class="crumb">Projects › SYS Rebranding — Overview | Plan & Quote | Delivery | Time ${can('s1')?'| Financials':can('projhealth')?'| Budget health':''}</div>
+ <div class="cards">
+  <div class="card"><h3>Budget health</h3><div class="big">${can('projhealth')?'61%':'—'}</div><div class="bar"><i style="width:61%"></i><em style="left:55%"></em></div><span class="mut">used at 55% of timeline ⚠</span></div>
+  <div class="card"><h3>Hours</h3><div class="big">54%</div><div class="bar"><i style="width:54%"></i><em style="left:55%"></em></div><span class="mut">tracking timeline ✓</span></div>
+  <div class="card"><h3>Forecast margin</h3><div class="big">${can('projhealth')?'48%':'—'}</div><span class="mut">target 55% · trend ▁▂▃▅</span></div></div>
+ <table><tr><th>phase</th><th class=num>est h</th><th class=num>act h</th><th class=num>remain ✎</th><th>cost used</th><th>forecast</th></tr>
+ <tr><td>Discovery</td><td class=num>40</td><td class=num>38</td><td class=num>–</td><td><div class="bar"><i style="width:95%"></i></div></td><td class="green">on est ✓</td></tr>
+ <tr><td>Strategy</td><td class=num>80</td><td class=num>92</td><td class=num>–</td><td><div class="bar"><i style="width:100%"></i></div></td><td class="amber">+15% · noted</td></tr>
+ <tr><td>Identity design</td><td class=num>160</td><td class=num>118</td><td class=num>55</td><td><div class="bar"><i style="width:74%"></i><em style="left:55%"></em></div></td><td class="amber">+8% ⚠</td></tr>
+ <tr><td>Applications</td><td class=num>120</td><td class=num>12</td><td class=num>108</td><td><div class="bar"><i style="width:10%"></i></div></td><td>on est</td></tr></table>
+ <div class="note warn">Identity design is using hours faster than planned — 74% used at 55% of the timeline. Similar branding projects averaged 112% on this phase. <b>[Draft a variation]</b> [Rebalance staffing] [Accept & note]</div>
+ <p>${can('s1')?`<b>Financials (finance view):</b> internal cost ${money(20740)} · external ${money(20000)} · GP to date ${money(25918)} (37.0%)`:can('projhealth')?`<b>Budget (masked):</b> ${money(44083)} of ${money(70193)} consumed · cost rates not shown`:`Financial detail is not part of your access.`}</p>
+ <div class="wf">Wireframe C1/C2 · lead sees $ aggregates, never rates · benchmark note as marginalia</div>`;},
+
+plan(){return `<h1>Plan & Quote · New Spatial Activation</h1><div class="crumb">1 Particulars → 2 Structure → 3 Effort → 4 Externals → <b>5 Price</b> → 6 Scenarios → 7 Approval</div>
+ <div class="flex"><div>
+ <table><tr><th>phase</th><th class=num>F</th><th class=num>CD</th><th class=num>Des</th><th class=num>ACP</th><th class=num>Σh</th><th class=num>int. cost</th></tr>
+ <tr><td>Discovery</td><td class=num>2</td><td class=num>8</td><td class=num>–</td><td class=num>12</td><td class=num>22</td><td class=num>${can('s1')?'$2,014':'agg.'}</td></tr>
+ <tr><td>Spatial design</td><td class=num>4</td><td class=num>40</td><td class=num>120</td><td class=num>20</td><td class=num>184</td><td class=num>${can('s1')?'$12,708':'agg.'}</td></tr>
+ <tr><td>… all phases</td><td></td><td></td><td></td><td></td><td class=num><b>690</b></td><td class=num><b>$47,340</b></td></tr></table>
+ <p class="mut">scenarios: <span class="chip">Best</span><span class="chip"><b>Expected ●</b></span><span class="chip">High-effort</span><span class="chip">Reduced</span></p></div>
+ <div><table class="ladder">
+ <tr><td>internal cost</td><td class=num>$47,340</td></tr>
+ <tr><td>external + 20% markup</td><td class=num>$24,000 → sell $28,800</td></tr>
+ <tr><td>expenses</td><td class=num>$6,500</td></tr>
+ <tr><td>contingency 10% ✎</td><td class=num>$7,784</td></tr>
+ <tr><td>overhead recovery ✎ <span class="tag">analytical</span></td><td class=num>$9,660</td></tr>
+ <tr><td class="mut">negotiation floor</td><td class=num class="mut">$85,624</td></tr>
+ <tr><td class="mut">minimum safe price</td><td class=num class="mut">$95,284</td></tr>
+ <tr><td><b>target GM 55% → recommended</b></td><td class=num><b>$190,000</b></td></tr>
+ <tr><td class="amber">your quote ✎ $175,000</td><td class=num class="amber">GM 51% ⚠ below target, above safe</td></tr>
+ <tr><td class="mut">legacy lenses</td><td class=num class="mut">Margin-1 71% ✓ · true margin 51%</td></tr></table>
+ <button class="btn">Save estimate</button><button class="btn primary">Generate quotation v2 →</button></div></div>
+ <div class="wf">Wireframe D · price ladder shows every layer · acceptance freezes baseline</div>`;},
+
+people(){return `<h1>People</h1><div class="crumb">People › Directory</div>
+ <table><tr><th>name</th><th>role</th><th>team</th><th>type</th><th>schedule</th><th>cost config</th></tr>
+ <tr><td><u>Wei Ming Tan</u></td><td>Account Manager</td><td>Studio</td><td>FT</td><td>5d × 8h</td><td>${can('s1')?'✓ rates current':'—'}</td></tr>
+ <tr><td>Mei Chen</td><td>Designer</td><td>Studio</td><td>FT</td><td>5d × 8h</td><td>${can('s1')?'✓':'—'}</td></tr></table>
+ ${can('s1')?`<div class="card" style="max-width:520px"><h3>Wei Ming · Cost rates (derived, dated)</h3>
+ <table><tr><th>effective</th><th class=num>paid-h</th><th class=num>avail-h</th><th class=num>productive</th></tr>
+ <tr><td>01 Oct 26 →</td><td class=num>$34.10</td><td class=num>$39.05</td><td class=num>$48.85</td></tr>
+ <tr class="mut"><td>01 Jan 25 →</td><td class=num>$31.20</td><td class=num>$35.70</td><td class=num>$44.60</td></tr></table>
+ <p class="mut">⚠ Past agreements can't be edited — history is preserved. <button class="btn">New agreement →</button></p></div>`
+ :`<div class="note">Remuneration and cost rates are not part of your access.</div>`}
+ <div class="wf">Wireframe E1/E2 · S1 compartment · rate timeline never overwritten</div>`;},
+
+oev(){return `<h1>OE Verse</h1><div class="crumb">People › External network</div>
+ <div class="cards">
+ <div class="card"><h3>OEV Brand Designer</h3>Identity systems · SG · SGD<br><span class="chip">fixed project fee</span>${can('s1')?'<br>$20,000 · SYS Rebranding':''}<br><span class="mut">3 past projects · notes ✎</span></div>
+ <div class="card"><h3>Curator · KL</h3>Programming · MYR<br><span class="chip">monthly retainer</span>${can('s1')?'<br>$4,000/mo · Night Fest':''}<br><span class="mut">attribution: single project</span></div>
+ <div class="card"><h3>Fabricator · JB</h3>Production · SGD<br><span class="chip">milestone</span>${can('s1')?'<br>$120,000 · 3 milestones':''}<br><span class="mut">committed in full at signing</span></div></div>
+ <button class="btn primary">+ New agreement</button>
+ <div class="wf">Wireframe E3 · commercial models never forced into hourly · rates masked without S1</div>`;},
+
+costs(){return `<h1>Company Costs</h1><div class="crumb">Company › Overheads register</div>
+ <table><tr><th>category</th><th>item</th><th>recur</th><th class=num>monthly</th><th class=num>FY fcst / act</th></tr>
+ <tr><td>Rental</td><td>Studio</td><td>mo</td><td class=num>$6,500</td><td class=num>78k / 45.5k ✓</td></tr>
+ <tr><td>Software</td><td>Adobe + Figma + …</td><td>mo</td><td class=num>$1,840</td><td class=num>22k / 12.9k ✓</td></tr>
+ <tr><td>Insurance</td><td>Prof. indemnity</td><td>yr÷12</td><td class=num>$400</td><td class=num>4.8k / 4.8k ✓</td></tr>
+ <tr><td>Marketing</td><td>Site + press</td><td>var</td><td class=num>~$1,200</td><td class=num class="amber">14k / 9.1k +0.9k ⚠</td></tr></table>
+ <div class="note">Guard: payroll-like entries are rejected here — salaries live in People, and reach the P&L through time allocation. (This is how double counting stays impossible.)</div>
+ <div class="wf">Wireframe E4 · overhead register · category guards</div>`;},
+
+cockpit(){if(!can('s2'))return SCREENS.denied();
+ return `<h1>Company Cockpit · July 2026 <span class="tag green">tie-out ● green</span></h1><div class="crumb">Company › Monthly account</div>
+ <table style="max-width:560px">
+ <tr><td>recognised revenue</td><td class=num>$96,000</td><td class="mut">▁▃▅▆</td></tr>
+ <tr><td>project gross profit</td><td class=num>$34,500</td><td class="mut">GM 36%</td></tr>
+ <tr><td>non-project payroll</td><td class=num>−$21,000</td><td class="mut">BD · admin · leave</td></tr>
+ <tr><td>unallocated payroll</td><td class=num class="amber">−$2,300</td><td class="amber">6% — data gap, not discipline</td></tr>
+ <tr><td>overheads</td><td class=num>−$12,000</td><td></td></tr>
+ <tr><th>operating profit</th><th class=num>−$800</th><th class="amber">just under break-even</th></tr>
+ <tr><td>coverage</td><td class=num>0.98</td><td class="mut">GP covered 98% of running costs</td></tr>
+ <tr><td>forecast year-end</td><td class=num>+$41k</td><td class="mut">low +12k · high +78k</td></tr></table>
+ <div class="note warn">⚑ Needs attention: Placemaking SP (forecast −2.5%) · Night Festival hours pacing · <a href="#" onclick="go('portfolio')">open portfolio →</a></div>
+ <p class="mut">CAPACITY next 4 wks: 82% committed · PIPELINE $310k weighted · every figure drills to its inputs</p>
+ <div class="wf">Wireframe F1 · one-page monthly account · calm language for a near-miss month</div>`;},
+
+portfolio(){if(!can('s2'))return SCREENS.denied();
+ return `<h1>Portfolio Profitability</h1><div class="crumb">Company › Portfolio · sort: profit per hour ▾</div>
+ <table><tr><th>project</th><th class=num>fee</th><th class=num>actual cost</th><th class=num>GP</th><th class=num>GM</th><th class=num>$/int. hour</th><th>risk</th></tr>
+ ${PROJECTS.map(p=>`<tr><td>${p.n}</td><td class=num>${money(p.fee)}</td><td class=num>${money(p.cost)}</td><td class=num class="${p.cls}">${money(p.gp)}</td><td class=num class="${p.cls}">${p.gm}</td><td class=num class="${p.cls}"><b>${p.ph}</b></td><td>${p.risk}</td></tr>`).join('')}</table>
+ <div class="note risk">The $250k Placemaking project lost money; the $12k sprint earned $110 per hour. Third-party margin on Placemaking read 52% — only the full model shows the loss. <b>[Compare selected]</b></div>
+ <div class="wf">Wireframe F2 · profit-per-hour as the equaliser · sortable table is the honest chart</div>`;},
+
+reports(){return `<h1>Reports</h1><div class="crumb">Reports › Library</div>
+ <p><span class="chip">Project profitability</span><span class="chip">Est vs actual hours</span><span class="chip">Company time allocation</span><span class="chip">Monthly summary</span>${can('s2')?'<span class="chip">Service-line analysis (R2)</span><span class="chip">Client profitability (R2)</span>':''}</p>
+ <div class="card" style="max-width:560px"><h3>Company time allocation · Jul</h3>
+ client work ▓▓▓▓▓▓▓▓▓▓ 58%<br>business dev ▓▓ 11%<br>admin ▓▓ 9%<br>training ▓ 4%<br>leave/PH ▓▓ 12%<br>unallocated ▓ 6% <span class="mut">— aggregate only, by design</span></div>
+ <div class="wf">Wireframe · fixed reports R1 · builder R2 · no per-person productivity dimension exists</div>`;},
+
+admin(){return `<h1>Administration</h1><div class="crumb">Admin</div>
+ <p><span class="chip">Project templates (4)</span><span class="chip">Activity categories · flags</span><span class="chip">Time rules</span><span class="chip">Financial settings · GST 9%</span><span class="chip">Financial periods · Jun locked 🔒</span><span class="chip">Permissions</span><span class="chip">Audit log</span></p>
+ <div class="note">June is closed — entries there are preserved as they were. Corrections flow as dated adjustments in July.</div>
+ <div class="wf">Wireframe · admin area · locking + audit surface</div>`;},
+
+denied(){return `<h1>—</h1><div class="note">This area isn't part of your access. If it should be, Ryan or the ops team can grant it.</div>`;},
+more(){return SCREENS.insights();}
+};
+
+function nav(){const el=document.getElementById('nav');
+ el.innerHTML=`<div class="logo">◐ OE CONSOLE</div>`+NAV[S.role].map(([k,l])=>`<a href="#" class="${S.screen===k?'active':''}" onclick="go('${k}');return false">${l}</a>`).join('')
+ +`<div style="padding:12px 16px;color:var(--mut);font-size:11px;border-top:1px solid var(--line);margin-top:10px">Your time, your data.<br><u>Who sees what →</u></div>`;}
+function go(s){S.screen=SCREENS[s]?s:'home';render();}
+function setRole(r){S.role=r;const allowed=NAV[r].map(x=>x[0]);if(!allowed.includes(S.screen))S.screen='home';render();}
+function render(){nav();document.getElementById('screen').innerHTML=SCREENS[S.screen]();}
+render();
+</script>
+</body>
+</html>
