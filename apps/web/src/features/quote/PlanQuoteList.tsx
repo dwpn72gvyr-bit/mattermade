@@ -1,5 +1,5 @@
-// Plan & Quote entry: quotations in play, and the door into the seven-step
-// flow for the project being estimated (§8).
+// Plan & Quote entry: quotations in play, and the door into the single-screen
+// estimating workbench for the project being estimated (§8).
 
 import React from 'react';
 import { Link } from 'react-router-dom';
@@ -22,11 +22,19 @@ export default function PlanQuoteList() {
 
   const rows = quotes.data ?? [];
 
+  const statusNote: Record<string, string> = {
+    draft: 'Being estimated in the workbench',
+    sent: 'With the client, awaiting a decision',
+    accepted: 'Baseline frozen and handed to delivery',
+    superseded: 'Replaced by a newer version',
+    declined: 'Not taken up',
+  };
+
   return (
     <div>
       <PageHeader
         title="Plan & Quote"
-        lede="From effort to price in one structure: the phases and hours estimated here are the same phases and hours the project is delivered and measured against."
+        lede="Each estimate opens as a single workbench: structure, scope of work, externals, the price ladder and the scenarios on one page, every figure responding live to every edit, with approval converting the chosen model straight into a project."
       />
       <LedgerTable
         caption="Quotations"
@@ -41,6 +49,9 @@ export default function PlanQuoteList() {
               <StatusChip tone={q.status === 'accepted' ? 'positive' : q.status === 'draft' ? 'neutral' : 'info'}>
                 {q.status}
               </StatusChip>
+              <span className="block text-xs text-ink-faint mt-1">
+                {statusNote[q.status] ?? q.status}
+              </span>
             </Td>
             <Td num>{fmtMoneyWhole(q.totalMinor)}</Td>
             <Td>

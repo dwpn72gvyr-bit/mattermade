@@ -4,7 +4,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../stores/session';
 import { getPeopleOptions, saveProject } from '../../api/projectOps';
 import { getTemplates } from '../../api/queries';
@@ -16,6 +16,7 @@ export default function ProjectEditor() {
   const { projectId } = useParams();
   const account = useAccount();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const canManage = ['super_admin', 'ops_admin', 'leadership'].some((r) => account.roles.includes(r));
 
   const options = useQuery({ queryKey: ['people-options'], queryFn: () => getPeopleOptions(account) });
@@ -53,7 +54,12 @@ export default function ProjectEditor() {
         teamPersonIds: teamIds,
         phases: phaseNames.filter((p) => p.trim()).map((p) => ({ name: p.trim() })),
       }),
-    onSuccess: (p) => navigate(`/projects/${p.id}`),
+    onSuccess: (p) => {
+      qc.invalidateQueries({ queryKey: ['assignments'] });
+      qc.invalidateQueries({ queryKey: ['portfolio'] });
+      qc.invalidateQueries({ queryKey: ['project'] });
+      navigate(`/projects/${p.id}`);
+    },
   });
 
   const applyTemplate = (templateId: string) => {

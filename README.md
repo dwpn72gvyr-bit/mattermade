@@ -15,9 +15,13 @@ pnpm build        # production build of every workspace
 
 Add `?chaos=0.15` to the URL to demonstrate the mock transport's seeded error injection.
 
-## Demo accounts
+## Signing in
 
-The account switcher in the top bar re-renders navigation subtractively and re-masks every figure on screen. No password, mock data only.
+The console opens on a sign-in page: pick a fictional role to adopt it. Each
+sign-in re-renders navigation subtractively and re-masks every figure. The
+login page also offers two datasets: the demo seed (twelve fictional projects,
+a year of mapped time) or a fresh workspace with fictional working data
+switched off, for testing with real inputs.
 
 | Account | Roles | What to look at |
 |---|---|---|
@@ -28,6 +32,17 @@ The account switcher in the top bar re-renders navigation subtractively and re-m
 | Sofia | leadership | Dashboards and approvals with people-cost aggregates masked |
 | Wei Ming | team member + project lead (one project) | Lead view scoped to a single project |
 | Aiko | external contributor (OE Verse) | Hard-walled portal: own assignments and terms only |
+
+## The three chambers
+
+Navigation follows OuterEdit's operating chambers: **Business development**
+(leads TOFU to BOFU through conversion, Plan & Quote), **Project & service
+delivery** (portfolio, directory, OE Verse talent book), and **Financial
+discipline** (cockpit, P&L budget vs actual back to FY2018, periods). The
+super admin decides who holds each working module from Administration →
+Module access. Real P&L actuals load from a git-ignored Xero pull
+(`apps/web/src/api/data/xero-actuals.local.json`); the public repo carries
+structure only.
 
 ## Architecture
 

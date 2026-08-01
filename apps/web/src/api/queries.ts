@@ -321,7 +321,9 @@ export function getAssignments(account: DemoAccount) {
     const assigned = db.projects.filter(
       (p) =>
         (p.teamIds ?? []).includes(account.personId) ||
-        account.leadProjectIds.includes(p.id),
+        account.leadProjectIds.includes(p.id) ||
+        p.leadId === account.userId ||
+        p.createdBy === account.userId,
     );
     const open = (p: Project) => !['archived', 'lost', 'financially_closed', 'completed'].includes(p.status);
     return {

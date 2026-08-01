@@ -7,6 +7,7 @@ import { useAccount, useSession } from '../../stores/session';
 import { getPeriods, lockPeriod, reopenPeriod } from '../../api/queries';
 import { Banner, Button, LedgerTable, PageHeader, StatusChip, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPeriod } from '../../lib/format';
+import { todayStr } from '../../api/settings';
 
 export default function Periods() {
   const account = useAccount();
@@ -77,7 +78,7 @@ export default function Periods() {
           <p className="text-sm text-ink-muted mb-3">
             Locking snapshots every entry's cost and closes the month to edits. Corrections after
             this become dated adjustments.
-            {lockTarget === '2026-06' && ' This month is still running; locking it now will close it early.'}
+            {lockTarget === todayStr().slice(0, 7) && ' This month is still running; locking it now will close it early.'}
           </p>
           <div className="flex gap-2">
             <Button variant="primary" onClick={() => lock.mutate(lockTarget)}>
