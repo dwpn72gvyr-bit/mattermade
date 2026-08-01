@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getTimeAllocationView } from '../../api/queries';
 import { Banner, Card, PageHeader } from '../../components/ui';
 import { fmtMoneyWhole, fmtPeriod } from '../../lib/format';
@@ -23,7 +23,7 @@ const LEARNING_KEYS = ['Training', 'Internal research', 'Internal initiative', '
 const LEAVE_KEYS = ['Annual leave', 'Medical leave', 'Public holiday', 'Time in lieu taken'];
 
 export default function TimeAllocation() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const data = useQuery({
     queryKey: ['time-allocation', account.userId],
     queryFn: () => getTimeAllocationView(account),

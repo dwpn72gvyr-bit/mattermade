@@ -4,13 +4,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getQuotations } from '../../api/queries';
 import { Banner, LedgerTable, PageHeader, StatusChip, Td, Th } from '../../components/ui';
 import { fmtDate, fmtMoneyWhole } from '../../lib/format';
 
 export default function PlanQuoteList() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const quotes = useQuery({
     queryKey: ['quotations', account.userId],
     queryFn: () => getQuotations(account),

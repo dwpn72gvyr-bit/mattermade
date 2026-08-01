@@ -12,7 +12,7 @@ import {
   type PricingInputs,
 } from '@oe/finance';
 import { RATE_CARD, AVAILABLE_RATE_CARD } from '@oe/fixtures';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getQuotations, acceptQuotation } from '../../api/queries';
 import { Banner, Button, Card, PageHeader, Stat, StatusChip, LedgerTable, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPct } from '../../lib/format';
@@ -53,7 +53,7 @@ const INITIAL_EFFORT: EffortGrid = {
 
 export default function PlanQuoteFlow() {
   const { quoteId = '' } = useParams();
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const qc = useQueryClient();
   const quotes = useQuery({ queryKey: ['quotations', account.userId], queryFn: () => getQuotations(account) });
   const record = quotes.data?.find((q) => q.quotation.id === quoteId);

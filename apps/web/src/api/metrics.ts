@@ -1,6 +1,7 @@
-// Metric assembly: fixture data in, @oe/finance out. No formula lives here;
+// Metric assembly: live database in, @oe/finance out. No formula lives here;
 // this module only gathers inputs and calls the engine (R1). Section numbers
-// cite the master prompt.
+// cite the master prompt. Reads the working db (not static fixtures) so fresh
+// workspaces and newly logged hours flow into every figure.
 
 import {
   actInternalCostMinor, estInternalCostMinor, grossProfitMinor, grossMargin,
@@ -8,23 +9,31 @@ import {
   hoursConsumedPct, burnFactor, etcMinor, fcacMinor, forecastGrossProfitMinor,
   forecastGrossMargin, thirdPartyMargin, committedTotalMinor, accruedForPeriodMinor,
   attributionShares, monthlyOverheadMinor, companyMonth, recognisedRevenueMinor,
-  Release1Recognition, roundHalfUp, computeTieOut, combineTieOuts,
+  Release1Recognition, roundHalfUp,
   type ExternalAgreementInput, type RevenueItemInput, type OverheadLine,
 } from '@oe/finance';
-import {
-  costedProjectEntries, projectEntries, computeMonthlyTieOuts, MONTHS,
-  BASELINE_HOURS, RATE_CARD, HOURLY_UNITS_BY_PERIOD, FIXTURE_TODAY,
-  ACTIVITY_BY_ID, epochDay, paidRateOn,
-} from '@oe/fixtures';
+import { RATE_CARD, HOURLY_UNITS_BY_PERIOD } from '@oe/fixtures';
 import type { Project, ExternalAgreement, RevenueItem, YearMonth } from '@oe/domain';
-import { db } from './db';
+import { db, activeMonths } from './db';
+import { todayStr } from './settings';
+import {
+  costedProjectEntries, projectEntries, computeMonthlyTieOuts, paidRateOn,
+  activityById,
+} from './timeMath';
 
-/** Demo FX for aggregating the one USD project into SGD company views.
+/** Demo FX for aggregating USD projects into SGD company views.
  *  docs/DECISIONS.md #4: fixed demo rate, labelled in the UI. */
 export const DEMO_USD_SGD = 1.35;
 
 export function toSgd(amountMinor: number, currency: string): number {
   return currency === 'USD' ? roundHalfUp(amountMinor * DEMO_USD_SGD) : amountMinor;
+}
+
+const MS_PER_DAY = 86_400_000;
+export function epochDay(date: string): number {
+  return Date.UTC(
+    Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)),
+  ) / MS_PER_DAY;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,8 +127,8 @@ export function recognisedForProjectMonth(projectId: string, period: YearMonth):
   return recognisedRevenueMinor(items, period, strategy);
 }
 
-export function recognisedToDate(projectId: string, through: YearMonth = FIXTURE_TODAY.slice(0, 7)): number {
-  return MONTHS.filter((m) => m <= through).reduce(
+export function recognisedToDate(projectId: string, through: YearMonth = todayStr().slice(0, 7)): number {
+  return activeMonths().filter((m) => m <= through).reduce(
     (s, m) => s + recognisedForProjectMonth(projectId, m),
     0,
   );
@@ -132,37 +141,34 @@ export function recognisedToDate(projectId: string, through: YearMonth = FIXTURE
 export interface ProjectMetrics {
   projectId: string;
   currency: string;
-  totalApprovedFeeMinor: number;      // F15: contract + approved variations
+  totalApprovedFeeMinor: number;
   approvedVariationsMinor: number;
-  actInternalCostMinor: number;       // F2
+  actInternalCostMinor: number;
   actInternalHours: number;
-  externalCommittedMinor: number;     // F3b committed basis
+  externalCommittedMinor: number;
   expensesActualMinor: number;
-  actDirectCostMinor: number;         // F4b
+  actDirectCostMinor: number;
   recognisedToDateMinor: number;
-  grossProfitMinor: number;           // F5b
-  grossMargin: number;                // F6
-  profitPerInternalHourMinor: number; // F8
-  effectiveHourlyRevenueMinor: number;// F7
-  thirdPartyMargin: number;           // legacy lens
+  grossProfitMinor: number;
+  grossMargin: number;
+  profitPerInternalHourMinor: number;
+  effectiveHourlyRevenueMinor: number;
+  thirdPartyMargin: number;
   baselineDirectMinor?: number;
   baselineHours?: number;
-  budgetConsumedPct?: number;         // F9
-  hoursConsumedPct?: number;          // F10
+  budgetConsumedPct?: number;
+  hoursConsumedPct?: number;
   scheduleElapsedPct: number;
-  fcacMinor?: number;                 // F12
-  forecastGrossProfitMinor?: number;  // F13a
-  forecastGrossMargin?: number;       // F13b
+  fcacMinor?: number;
+  forecastGrossProfitMinor?: number;
+  forecastGrossMargin?: number;
   burnFactor?: number;
 }
 
 export function projectHours(projectId: string): number {
   return (
     projectEntries(projectId)
-      .filter((e) => {
-        const a = ACTIVITY_BY_ID[e.activityId];
-        return a?.includedInProjectCosting;
-      })
+      .filter((e) => activityById(e.activityId)?.includedInProjectCosting)
       .reduce((s, e) => s + e.minutes, 0) / 60
   );
 }
@@ -170,9 +176,39 @@ export function projectHours(projectId: string): number {
 export function scheduleElapsedPct(p: Project): number {
   const span = epochDay(p.targetEndDate) - epochDay(p.startDate);
   if (span <= 0) return 1;
-  const end = p.actualEndDate ?? FIXTURE_TODAY;
-  const raw = (Math.min(epochDay(end), epochDay(FIXTURE_TODAY)) - epochDay(p.startDate)) / span;
+  const end = p.actualEndDate ?? todayStr();
+  const raw = (Math.min(epochDay(end), epochDay(todayStr())) - epochDay(p.startDate)) / span;
   return Math.min(1, Math.max(0, raw));
+}
+
+/** Baseline hours for a project: the frozen baseline when present, else the
+ *  sum of its phases' estimated hours (works for newly created projects too). */
+function baselineHoursFor(p: Project): number | undefined {
+  if (p.baseline) return p.baseline.totals.estHours;
+  const phases = db.phases.filter((ph) => ph.projectId === p.id);
+  if (phases.length === 0) return undefined;
+  const total = phases.reduce(
+    (s, ph) => s + Object.values(ph.estHoursByRole).reduce((a, h) => a + (h ?? 0), 0),
+    0,
+  );
+  return total > 0 ? total : undefined;
+}
+
+function baselineInternalCostFor(p: Project): number | undefined {
+  if (p.baseline) return p.baseline.totals.estInternalCostMinor;
+  const phases = db.phases.filter((ph) => ph.projectId === p.id);
+  if (phases.length === 0) return undefined;
+  const byRole: Record<string, number> = {};
+  for (const ph of phases) {
+    for (const [role, h] of Object.entries(ph.estHoursByRole)) {
+      byRole[role] = (byRole[role] ?? 0) + (h ?? 0);
+    }
+  }
+  try {
+    return estInternalCostMinor(byRole, RATE_CARD);
+  } catch {
+    return undefined;
+  }
 }
 
 export function computeProjectMetrics(p: Project): ProjectMetrics {
@@ -190,29 +226,21 @@ export function computeProjectMetrics(p: Project): ProjectMetrics {
   const gp = grossProfitMinor(recognised, direct);
   const elapsed = scheduleElapsedPct(p);
 
-  const base = p.baseline;
-  const baselineHours = base
-    ? base.totals.estHours
-    : BASELINE_HOURS[p.id]
-      ? Object.values(BASELINE_HOURS[p.id]!).reduce((s, h) => s + (h ?? 0), 0)
-      : undefined;
-  const baselineDirect = base?.totals.estDirectCostMinor;
+  const baselineHours = baselineHoursFor(p);
+  const baselineDirect = p.baseline?.totals.estDirectCostMinor;
 
-  // F11/F12 forecast for open projects: remaining baseline hours at the
-  // observed burn, remaining committed external, remaining planned expenses.
   let fcac: number | undefined;
   let bf: number | undefined;
   const isOpen = ['active', 'planning', 'on_hold'].includes(p.status);
   if (isOpen && baselineHours && baselineHours > 0) {
     bf = burnFactor(hours, Math.max(elapsed, 0.05), baselineHours);
     const remainingHours = Math.max(0, baselineHours - hours);
-    const blendedRate = baselineDirect && baselineHours
-      ? (base ? base.totals.estInternalCostMinor : estInternalCostMinor(BASELINE_HOURS[p.id] as Record<string, number>, RATE_CARD)) / baselineHours
-      : 0;
+    const baseInternal = baselineInternalCostFor(p);
+    const blendedRate = baseInternal && baselineHours ? baseInternal / baselineHours : 0;
     const plannedExpenses = expensesMinor(p.id, ['planned']);
     const etc = etcMinor(
       [{ remainingEstHours: remainingHours, burnFactor: bf, blendedRateMinor: blendedRate }],
-      0, // committed external already counted in full in direct (committed basis)
+      0,
       plannedExpenses,
     );
     fcac = fcacMinor(direct, etc);
@@ -266,10 +294,9 @@ export interface PhaseEva {
 
 export function phaseEstimateVsActual(projectId: string): PhaseEva[] {
   const phases = db.phases.filter((ph) => ph.projectId === projectId);
-  const entries = projectEntries(projectId).filter((e) => {
-    const a = ACTIVITY_BY_ID[e.activityId];
-    return a?.includedInProjectCosting;
-  });
+  const entries = projectEntries(projectId).filter(
+    (e) => activityById(e.activityId)?.includedInProjectCosting,
+  );
   return phases
     .sort((a, b) => a.order - b.order)
     .map((ph) => {
@@ -278,7 +305,7 @@ export function phaseEstimateVsActual(projectId: string): PhaseEva[] {
       const span = epochDay(ph.plannedEnd) - epochDay(ph.plannedStart);
       const elapsed = span <= 0
         ? 1
-        : Math.min(1, Math.max(0, (epochDay(FIXTURE_TODAY) - epochDay(ph.plannedStart)) / span));
+        : Math.min(1, Math.max(0, (epochDay(todayStr()) - epochDay(ph.plannedStart)) / span));
       return {
         phaseId: ph.id, name: ph.name, order: ph.order, status: ph.status,
         estHours: est, actHours: Math.round(act * 10) / 10, scheduleElapsedPct: elapsed,
@@ -290,17 +317,28 @@ export function phaseEstimateVsActual(projectId: string): PhaseEva[] {
 // Company month (§6.7) and time allocation (§6.3 buckets)
 // ---------------------------------------------------------------------------
 
-const tieOutsCache = computeMonthlyTieOuts();
+// Tie-outs recompute when entries change; a tiny cache avoids repeated work
+// within one render burst.
+let tieOutsCacheKey = '';
+let tieOutsCacheValue: ReturnType<typeof computeMonthlyTieOuts> = [];
+
+export function tieOuts() {
+  const key = `${db.timeEntries.length}:${db.timeEntries[db.timeEntries.length - 1]?.id ?? ''}`;
+  if (key !== tieOutsCacheKey) {
+    tieOutsCacheKey = key;
+    tieOutsCacheValue = computeMonthlyTieOuts();
+  }
+  return tieOutsCacheValue;
+}
 
 export function companyMonthMetrics(period: YearMonth) {
-  const tie = tieOutsCache.find((t) => t.period === period)!;
+  const tie = tieOuts().find((t) => t.period === period);
+  const perPersonTie = tie?.perPerson ?? [];
 
-  // Per-project labour costed in the month (F2 restricted to the period).
   const labourByProject = new Map<string, number>();
   for (const e of db.timeEntries) {
     if (!e.projectId || !e.date.startsWith(period)) continue;
-    const a = ACTIVITY_BY_ID[e.activityId];
-    if (!a?.includedInProjectCosting) continue;
+    if (!activityById(e.activityId)?.includedInProjectCosting) continue;
     const cost = (e.minutes / 60) * paidRateOn(e.personId, e.date);
     labourByProject.set(e.projectId, (labourByProject.get(e.projectId) ?? 0) + cost);
   }
@@ -321,9 +359,9 @@ export function companyMonthMetrics(period: YearMonth) {
   const recognisedRevenue = perProject.reduce((s, x) => s + x.recognised, 0);
   const projectGrossProfit = perProject.reduce((s, x) => s + x.gp, 0);
 
-  const nonProject = tie.perPerson.reduce((s, p) => s + p.allocation.nonProjectPayrollMinor, 0);
-  const unallocated = tie.perPerson.reduce((s, p) => s + p.allocation.unallocatedPayrollMinor, 0);
-  const reconciliation = tie.perPerson.reduce((s, p) => s + p.allocation.reconciliationAdjustmentMinor, 0);
+  const nonProject = perPersonTie.reduce((s, p) => s + p.allocation.nonProjectPayrollMinor, 0);
+  const unallocated = perPersonTie.reduce((s, p) => s + p.allocation.unallocatedPayrollMinor, 0);
+  const reconciliation = perPersonTie.reduce((s, p) => s + p.allocation.reconciliationAdjustmentMinor, 0);
 
   const overheadLines: OverheadLine[] = db.companyOverheads.map((l) => ({
     category: l.category,
@@ -345,7 +383,7 @@ export function companyMonthMetrics(period: YearMonth) {
   });
 
   const nonProjectByActivity: Record<string, number> = {};
-  for (const p of tie.perPerson) {
+  for (const p of perPersonTie) {
     for (const [name, v] of Object.entries(p.allocation.nonProjectByActivityMinor)) {
       nonProjectByActivity[name] = (nonProjectByActivity[name] ?? 0) + v;
     }
@@ -365,11 +403,11 @@ export function companyMonthMetrics(period: YearMonth) {
     operatingMargin: result.operatingMargin,
     overheadCoverage: result.overheadCoverage,
     runningCostsMinor: result.runningCostsMinor,
-    tieOut: tie.combined,
-    tieOutPerPerson: tie.perPerson.map((p) => p.tieOut),
+    tieOut: tie?.combined ?? {
+      expectedMinor: 0, allocatedMinor: 0, differenceMinor: 0, differencePct: 0, status: 'green' as const,
+    },
+    tieOutPerPerson: perPersonTie.map((p) => p.tieOut),
   };
 }
 
 export type CompanyMonthMetrics = ReturnType<typeof companyMonthMetrics>;
-
-export { MONTHS, FIXTURE_TODAY, tieOutsCache };

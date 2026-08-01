@@ -4,7 +4,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getDay, getWeek, getPortfolio } from '../../api/queries';
 import { Card, CompletionRing, PageHeader, StatusChip } from '../../components/ui';
 
@@ -15,7 +15,7 @@ function mondayOf(date: string): string {
 }
 
 export default function Home() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const today = useSession((s) => s.today);
   const day = useQuery({ queryKey: ['day', account.userId, today], queryFn: () => getDay(account, today) });
   const week = useQuery({ queryKey: ['week', account.userId, mondayOf(today)], queryFn: () => getWeek(account, mondayOf(today)) });

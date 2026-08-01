@@ -7,6 +7,7 @@ import AppShell from '../components/AppShell';
 import { EmptyState } from '../components/ui';
 
 const Styleguide = lazy(() => import('./Styleguide'));
+const Login = lazy(() => import('../features/auth/Login'));
 
 function Placeholder(props: { title: string; note?: string }) {
   return (
@@ -28,6 +29,14 @@ function lazyFeature(loader: () => Promise<{ default: React.ComponentType }>, fa
 
 export const router = createBrowserRouter([
   {
+    path: '/login',
+    element: (
+      <Suspense fallback={<div className="text-ink-muted py-10 text-center">Loading…</div>}>
+        <Login />
+      </Suspense>
+    ),
+  },
+  {
     element: <AppShell />,
     children: [
       { path: '/', element: lazyFeature(() => import('../features/personal/Home'), 'Home') },
@@ -38,6 +47,11 @@ export const router = createBrowserRouter([
       { path: '/profile', element: lazyFeature(() => import('../features/personal/Profile'), 'Profile') },
       { path: '/privacy', element: lazyFeature(() => import('../features/personal/Privacy'), 'Privacy') },
       { path: '/projects', element: lazyFeature(() => import('../features/projects/Portfolio'), 'Portfolio') },
+      { path: '/projects/new', element: lazyFeature(() => import('../features/projects/ProjectEditor'), 'New project') },
+      { path: '/projects/:projectId/edit', element: lazyFeature(() => import('../features/projects/ProjectEditor'), 'Edit project') },
+      { path: '/bizdev', element: lazyFeature(() => import('../features/bizdev/Pipeline'), 'Leads & pipeline') },
+      { path: '/admin/completeness', element: lazyFeature(() => import('../features/admin/Completeness'), 'Day mapping') },
+      { path: '/admin/access', element: lazyFeature(() => import('../features/admin/ModuleAccess'), 'Module access') },
       { path: '/projects/:projectId/*', element: lazyFeature(() => import('../features/projects/ProjectOverview'), 'Project') },
       { path: '/plan-quote', element: lazyFeature(() => import('../features/quote/PlanQuoteList'), 'Plan & Quote') },
       { path: '/plan-quote/:quoteId', element: lazyFeature(() => import('../features/quote/PlanQuoteFlow'), 'Plan & Quote') },

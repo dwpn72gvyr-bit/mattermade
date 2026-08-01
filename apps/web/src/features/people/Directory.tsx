@@ -3,12 +3,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getDirectory } from '../../api/queries';
 import { Banner, Card, PageHeader } from '../../components/ui';
 
 export default function Directory() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const directory = useQuery({
     queryKey: ['directory', account.userId],
     queryFn: () => getDirectory(account),

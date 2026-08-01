@@ -3,14 +3,14 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getVerse } from '../../api/queries';
 import { Banner, Card, Masked, PageHeader, StatusChip } from '../../components/ui';
 import { fmtDate, fmtMoneyWhole } from '../../lib/format';
 
 export default function CollaboratorProfile() {
   const { collaboratorId = '' } = useParams();
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const verse = useQuery({ queryKey: ['verse', account.userId], queryFn: () => getVerse(account) });
 
   if (verse.isError) {

@@ -6,7 +6,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import {
   getDay, saveEntry, deleteEntry, copyDay, getFavourites, getAssignments,
   type DayEntryView, type SaveEntryInput,
@@ -26,7 +26,7 @@ function minutesLabel(m: number): string {
 }
 
 export default function Today() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const today = useSession((s) => s.today);
   const [date, setDate] = useState(today);
   const qc = useQueryClient();

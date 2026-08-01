@@ -3,12 +3,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getPerson } from '../../api/queries';
 import { Card, PageHeader, Stat, StatusChip } from '../../components/ui';
 
 export default function Profile() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const person = useQuery({
     queryKey: ['person', account.userId, account.personId],
     queryFn: () => getPerson(account, account.personId),

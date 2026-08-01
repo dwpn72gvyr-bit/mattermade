@@ -6,20 +6,22 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getProject, submitVariation, approveVariation } from '../../api/queries';
+import { addProjectNote, getProjectNotes } from '../../api/projectOps';
+import { Link } from 'react-router-dom';
 import {
   Banner, BurnBar, Button, Card, EstimateVsActual, LedgerTable, Masked,
   PageHeader, Stat, StatusChip, Td, Th,
 } from '../../components/ui';
 import { fmtDate, fmtMoneyWhole, fmtPct } from '../../lib/format';
 
-const TABS = ['Health', 'Phases', 'Financials', 'External', 'Revenue', 'Variations', 'Retrospective'] as const;
+const TABS = ['Health', 'Phases', 'Notes', 'Financials', 'External', 'Revenue', 'Variations', 'Retrospective'] as const;
 type Tab = (typeof TABS)[number];
 
 export default function ProjectOverview() {
   const { projectId = '' } = useParams();
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const qc = useQueryClient();
   const detail = useQuery({
     queryKey: ['project', account.userId, projectId],
@@ -36,7 +38,9 @@ export default function ProjectOverview() {
 
   const m = d.metrics;
   const { seesMoney, isLeadHere } = d.access;
+  const onTeam = (d.project.teamIds ?? []).includes(account.personId);
   const visibleTabs = TABS.filter((t) => {
+    if (t === 'Notes') return onTeam || isLeadHere || seesMoney || account.roles.includes('ops_admin');
     if (t === 'Financials' || t === 'Revenue') return seesMoney;
     if (t === 'External') return d.externals.length > 0;
     if (t === 'Retrospective') return Boolean(d.retrospective);
@@ -60,11 +64,18 @@ export default function ProjectOverview() {
           </>
         }
         actions={
-          (isLeadHere || account.roles.includes('leadership')) && (
-            <Button variant="primary" onClick={() => { setTab('Variations'); setShowVariationForm(true); }}>
-              Log a variation
-            </Button>
-          )
+          <span className="flex gap-2">
+            {['super_admin', 'ops_admin', 'leadership'].some((r) => account.roles.includes(r)) && (
+              <Link to={`/projects/${projectId}/edit`}>
+                <Button variant="secondary">Edit project</Button>
+              </Link>
+            )}
+            {(isLeadHere || account.roles.includes('leadership')) && (
+              <Button variant="primary" onClick={() => { setTab('Variations'); setShowVariationForm(true); }}>
+                Log a variation
+              </Button>
+            )}
+          </span>
         }
       />
 
@@ -309,6 +320,8 @@ export default function ProjectOverview() {
         </div>
       )}
 
+      {tab === 'Notes' && <NotesTab projectId={projectId} />}
+
       {tab === 'Variations' && (
         <VariationsTab
           projectId={projectId}
@@ -347,7 +360,7 @@ function VariationsTab(props: {
   showForm: boolean;
   onFormDone: () => void;
 }) {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const qc = useQueryClient();
   const [description, setDescription] = useState('');
   const [feeDelta, setFeeDelta] = useState('');
@@ -420,6 +433,56 @@ function VariationsTab(props: {
           </Button>
         </form>
       </Card>
+    </div>
+  );
+}
+
+
+function NotesTab(props: { projectId: string }) {
+  const account = useAccount();
+  const qc = useQueryClient();
+  const notes = useQuery({
+    queryKey: ['project-notes', props.projectId],
+    queryFn: () => getProjectNotes(account, props.projectId),
+  });
+  const [body, setBody] = useState('');
+  const post = useMutation({
+    mutationFn: () => addProjectNote(account, props.projectId, body),
+    onSuccess: () => { setBody(''); qc.invalidateQueries({ queryKey: ['project-notes', props.projectId] }); },
+  });
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <Card temp="personal">
+        <h3 className="display text-lg mb-2">Add an update</h3>
+        <textarea
+          className="w-full border border-line rounded-financial bg-raised px-3 py-2 text-base min-h-[80px]"
+          placeholder="What moved, what's blocked, what the client said. The admin reads these as the project progresses."
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+        />
+        <div className="mt-2 flex items-center justify-between">
+          <span className="text-xs text-ink-faint">Visible to the project team, lead, leadership and admin.</span>
+          <Button variant="primary" size="sm" disabled={!body.trim() || post.isPending} onClick={() => post.mutate()}>
+            Post update
+          </Button>
+        </div>
+        {post.isError && (
+          <Banner tone="critical" className="mt-2">That didn't save. Try again in a moment.</Banner>
+        )}
+      </Card>
+      {(notes.data ?? []).length === 0 && (
+        <p className="text-ink-muted text-base">No updates yet. The first one starts this project's running story.</p>
+      )}
+      {(notes.data ?? []).map((n) => (
+        <Card key={n.id}>
+          <div className="flex items-baseline justify-between gap-2 mb-1">
+            <span className="font-medium text-base">{n.authorName}</span>
+            <span className="text-xs text-ink-faint tabular">{n.createdAt.slice(0, 16).replace('T', ' ')}</span>
+          </div>
+          <p className="text-base whitespace-pre-wrap">{n.body}</p>
+        </Card>
+      ))}
     </div>
   );
 }

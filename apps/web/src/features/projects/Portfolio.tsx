@@ -2,11 +2,11 @@
 // honest chart. Money renders masked for those outside its access (R6).
 
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getPortfolio, type PortfolioRow } from '../../api/queries';
-import { EmptyState, LedgerTable, Masked, PageHeader, StatusChip, Td, Th } from '../../components/ui';
+import { Button, EmptyState, LedgerTable, Masked, PageHeader, StatusChip, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPct } from '../../lib/format';
 
 type SortKey = 'name' | 'status' | 'fee' | 'cost' | 'gp' | 'margin' | 'pph' | 'hours';
@@ -27,7 +27,7 @@ const STATUS_TONE: Record<string, 'positive' | 'caution' | 'critical' | 'info' |
 };
 
 export default function Portfolio() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const portfolio = useQuery({
     queryKey: ['portfolio', account.userId],
     queryFn: () => getPortfolio(account),
@@ -62,7 +62,17 @@ export default function Portfolio() {
   };
 
   if (portfolio.isSuccess && rows.length === 0) {
-    return <EmptyState title="No projects here yet." body="The first one you add starts the studio's memory." />;
+    return (
+      <EmptyState
+        title="No projects here yet."
+        body="The first one you add starts the studio's memory."
+        action={
+          ['super_admin', 'ops_admin', 'leadership'].some((r) => account.roles.includes(r)) ? (
+            <Link to="/projects/new"><Button variant="primary">Add the first project</Button></Link>
+          ) : undefined
+        }
+      />
+    );
   }
 
   const seesMoney = rows.some((r) => 'value' in r.fee);
@@ -84,6 +94,13 @@ export default function Portfolio() {
           seesMoney
             ? 'Every project, its cost structure and its profitability, in one place. Every figure drills to its inputs.'
             : 'Your projects and how their hours are tracking.'
+        }
+        actions={
+          ['super_admin', 'ops_admin', 'leadership'].some((r) => account.roles.includes(r)) && (
+            <Link to="/projects/new">
+              <Button variant="primary">New project</Button>
+            </Link>
+          )
         }
       />
       <LedgerTable

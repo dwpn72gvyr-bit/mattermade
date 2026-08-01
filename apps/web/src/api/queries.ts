@@ -4,9 +4,10 @@
 
 import { can, type Actor, type MaskKind } from '@oe/policy';
 import type { TimeEntry, Project, YearMonth, CalendarDate } from '@oe/domain';
-import {
-  ACTIVITY_BY_ID, SG_PUBLIC_HOLIDAYS, FIXTURE_TODAY, MONTHS,
-} from '@oe/fixtures';
+import { SG_PUBLIC_HOLIDAYS } from '@oe/fixtures';
+import { todayStr } from './settings';
+import { activityById } from './timeMath';
+import { activeMonths } from './db';
 import { call } from './transport';
 import { db, newId, audit } from './db';
 import { actorFor } from './actor';
@@ -66,7 +67,7 @@ export interface DayEntryView {
 }
 
 function entryView(e: TimeEntry): DayEntryView {
-  const a = ACTIVITY_BY_ID[e.activityId]!;
+  const a = activityById(e.activityId)!;
   const project = e.projectId ? db.projects.find((p) => p.id === e.projectId) : undefined;
   const phase = e.phaseId ? db.phases.find((p) => p.id === e.phaseId) : undefined;
   return {
@@ -126,7 +127,7 @@ export function saveEntry(account: DemoAccount, input: SaveEntryInput) {
       input.id ? 'edit' : 'create',
       { type: 'timeEntry', ownerId: account.personId },
       undefined,
-      FIXTURE_TODAY,
+      todayStr(),
     );
     if (decision.allow !== true) {
       throw new Error('Only you can shape your own record.');
@@ -136,7 +137,7 @@ export function saveEntry(account: DemoAccount, input: SaveEntryInput) {
       throw new Error('period_locked');
     }
     if (input.minutes <= 0 || input.minutes > 24 * 60) throw new Error('invalid_minutes');
-    if (!ACTIVITY_BY_ID[input.activityId]) throw new Error('unknown_activity');
+    if (!activityById(input.activityId)) throw new Error('unknown_activity');
 
     if (input.id) {
       const existing = db.timeEntries.find((e) => e.id === input.id);
@@ -148,10 +149,10 @@ export function saveEntry(account: DemoAccount, input: SaveEntryInput) {
         projectId: input.projectId,
         phaseId: input.phaseId,
         notes: input.notes,
-        updatedAt: `${FIXTURE_TODAY}T12:00:00Z`,
+        updatedAt: `${todayStr()}T12:00:00Z`,
         updatedBy: account.userId,
       });
-      if (existing.date !== FIXTURE_TODAY) {
+      if (existing.date !== todayStr()) {
         audit({ actorUserId: account.userId, entityType: 'TimeEntry', entityId: existing.id, action: 'update', oldValue: before, newValue: { minutes: input.minutes, activityId: input.activityId } });
       }
       return entryView(existing);
@@ -167,16 +168,16 @@ export function saveEntry(account: DemoAccount, input: SaveEntryInput) {
     );
     if (existing) {
       existing.minutes += input.minutes;
-      existing.updatedAt = `${FIXTURE_TODAY}T12:00:00Z`;
+      existing.updatedAt = `${todayStr()}T12:00:00Z`;
       existing.updatedBy = account.userId;
       return entryView(existing);
     }
 
     const entry: TimeEntry = {
       id: newId('te'),
-      createdAt: `${FIXTURE_TODAY}T12:00:00Z`,
+      createdAt: `${todayStr()}T12:00:00Z`,
       createdBy: account.userId,
-      updatedAt: `${FIXTURE_TODAY}T12:00:00Z`,
+      updatedAt: `${todayStr()}T12:00:00Z`,
       updatedBy: account.userId,
       personId: account.personId,
       date: input.date,
@@ -210,7 +211,7 @@ export function copyDay(account: DemoAccount, from: CalendarDate, to: CalendarDa
     const scheduled = scheduledMinutes(account.personId, to);
     const alreadyMapped = db.timeEntries
       .filter((e) => e.personId === account.personId && e.date === to)
-      .filter((e) => ACTIVITY_BY_ID[e.activityId]!.scope !== 'personal')
+      .filter((e) => activityById(e.activityId)!.scope !== 'personal')
       .reduce((s, e) => s + e.minutes, 0);
     if (scheduled > 0 && alreadyMapped >= scheduled) {
       return { skipped: true as const, entries: [] };
@@ -219,13 +220,13 @@ export function copyDay(account: DemoAccount, from: CalendarDate, to: CalendarDa
       (e) => e.personId === account.personId && e.date === from,
     );
     const created: TimeEntry[] = source
-      .filter((e) => ACTIVITY_BY_ID[e.activityId]!.scope !== 'personal')
+      .filter((e) => activityById(e.activityId)!.scope !== 'personal')
       .map((e) => ({
         ...e,
         id: newId('te'),
         date: to,
         source: 'copied' as const,
-        createdAt: `${FIXTURE_TODAY}T12:00:00Z`,
+        createdAt: `${todayStr()}T12:00:00Z`,
         createdBy: account.userId,
       }));
     db.timeEntries.push(...created);
@@ -268,7 +269,7 @@ export function getInsights(account: DemoAccount) {
     const mine = db.timeEntries.filter((e) => e.personId === account.personId);
     const byDay = new Map<string, { projects: Set<string>; minutes: number }>();
     for (const e of mine) {
-      const a = ACTIVITY_BY_ID[e.activityId]!;
+      const a = activityById(e.activityId)!;
       if (!a.includedInProjectCosting) continue;
       const d = byDay.get(e.date) ?? { projects: new Set<string>(), minutes: 0 };
       if (e.projectId) d.projects.add(e.projectId);
@@ -278,13 +279,13 @@ export function getInsights(account: DemoAccount) {
     const focusDays = [...byDay.values()].filter((d) => d.projects.size === 1 && d.minutes >= 300).length;
     const fragmentedDays = [...byDay.values()].filter((d) => d.projects.size >= 3).length;
     const projectMinutes = mine
-      .filter((e) => ACTIVITY_BY_ID[e.activityId]!.includedInProjectCosting)
+      .filter((e) => activityById(e.activityId)!.includedInProjectCosting)
       .reduce((s, e) => s + e.minutes, 0);
     const companyMinutes = mine
-      .filter((e) => { const a = ACTIVITY_BY_ID[e.activityId]!; return a.scope === 'company' && a.productive; })
+      .filter((e) => { const a = activityById(e.activityId)!; return a.scope === 'company' && a.productive; })
       .reduce((s, e) => s + e.minutes, 0);
     const leaveMinutes = mine
-      .filter((e) => { const a = ACTIVITY_BY_ID[e.activityId]!; return a.scope === 'company' && !a.productive && a.paid; })
+      .filter((e) => { const a = activityById(e.activityId)!; return a.scope === 'company' && !a.productive && a.paid; })
       .reduce((s, e) => s + e.minutes, 0);
     return { focusDays, fragmentedDays, projectMinutes, companyMinutes, leaveMinutes, mappedDays: byDay.size };
   });
@@ -294,7 +295,7 @@ export function getFavourites(account: DemoAccount) {
   return call('personal.favourites', () => {
     const counts = new Map<string, { activityId: string; projectId?: string; n: number }>();
     for (const e of db.timeEntries.filter((x) => x.personId === account.personId)) {
-      const a = ACTIVITY_BY_ID[e.activityId]!;
+      const a = activityById(e.activityId)!;
       if (a.scope === 'personal') continue;
       const key = `${e.activityId}|${e.projectId ?? ''}`;
       const cur = counts.get(key) ?? { activityId: e.activityId, projectId: e.projectId, n: 0 };
@@ -306,7 +307,7 @@ export function getFavourites(account: DemoAccount) {
       .slice(0, 5)
       .map((c) => ({
         activityId: c.activityId,
-        activityName: ACTIVITY_BY_ID[c.activityId]!.name,
+        activityName: activityById(c.activityId)!.name,
         projectId: c.projectId,
         projectName: c.projectId ? db.projects.find((p) => p.id === c.projectId)?.name : undefined,
       }));
@@ -380,10 +381,10 @@ export function getPortfolio(account: DemoAccount) {
         fee: feeVisible
           ? { value: metrics.totalApprovedFeeMinor }
           : { maskedAs: 'hidden' },
-        actualCost: maskable(actor, res, 'actualCostMinor', metrics.actDirectCostMinor, FIXTURE_TODAY),
-        grossProfit: maskable(actor, res, 'grossProfitMinor', metrics.grossProfitMinor, FIXTURE_TODAY),
-        margin: maskable(actor, res, 'marginPct', metrics.grossMargin, FIXTURE_TODAY),
-        profitPerHour: maskable(actor, res, 'profitability', metrics.profitPerInternalHourMinor, FIXTURE_TODAY),
+        actualCost: maskable(actor, res, 'actualCostMinor', metrics.actDirectCostMinor, todayStr()),
+        grossProfit: maskable(actor, res, 'grossProfitMinor', metrics.grossProfitMinor, todayStr()),
+        margin: maskable(actor, res, 'marginPct', metrics.grossMargin, todayStr()),
+        profitPerHour: maskable(actor, res, 'profitability', metrics.profitPerInternalHourMinor, todayStr()),
         visibleAsLead: account.leadProjectIds.includes(p.id),
       };
     });
@@ -419,7 +420,7 @@ export function getProject(account: DemoAccount, projectId: string) {
       externals: db.externalAgreements
         .filter((a) => a.projectIds.includes(projectId))
         .map((a) => {
-          const rateVisible = can(actor, 'view', { type: 'externalAgreement' }, 'rate', FIXTURE_TODAY);
+          const rateVisible = can(actor, 'view', { type: 'externalAgreement' }, 'rate', todayStr());
           const collaborator = db.collaborators.find((c) => c.id === a.collaboratorId);
           return {
             id: a.id,
@@ -442,7 +443,7 @@ export function getProject(account: DemoAccount, projectId: string) {
         seesMoney,
         isFinance,
         isLeadHere,
-        fee: maskable(actor, res, 'fee', metrics.totalApprovedFeeMinor, FIXTURE_TODAY),
+        fee: maskable(actor, res, 'fee', metrics.totalApprovedFeeMinor, todayStr()),
         budgetConsumed: metrics.budgetConsumedPct,
         canLogVariation: isLeadHere || account.roles.includes('leadership'),
       },
@@ -459,9 +460,9 @@ export function submitVariation(account: DemoAccount, input: {
     if (!allowed) throw new Error('not_allowed');
     const v = {
       id: newId('var'),
-      createdAt: `${FIXTURE_TODAY}T12:00:00Z`,
+      createdAt: `${todayStr()}T12:00:00Z`,
       createdBy: account.userId,
-      updatedAt: `${FIXTURE_TODAY}T12:00:00Z`,
+      updatedAt: `${todayStr()}T12:00:00Z`,
       updatedBy: account.userId,
       projectId: input.projectId,
       description: input.description,
@@ -483,7 +484,7 @@ export function approveVariation(account: DemoAccount, variationId: string) {
     if (!v) throw new Error('not_found');
     v.status = 'approved';
     v.approvedByUserId = account.userId;
-    v.approvedAt = `${FIXTURE_TODAY}T12:00:00Z`;
+    v.approvedAt = `${todayStr()}T12:00:00Z`;
     audit({ actorUserId: account.userId, entityType: 'Variation', entityId: v.id, action: 'approve' });
     return v;
   });
@@ -495,7 +496,7 @@ export function approveVariation(account: DemoAccount, variationId: string) {
 
 function requireCompanyFinance(account: DemoAccount) {
   const actor = actorFor(account);
-  const d = can(actor, 'view', { type: 'companyFinance' }, undefined, FIXTURE_TODAY);
+  const d = can(actor, 'view', { type: 'companyFinance' }, undefined, todayStr());
   if (d.allow !== true) throw new Error('not_allowed');
 }
 
@@ -509,7 +510,7 @@ export function getCockpit(account: DemoAccount, month: YearMonth) {
 export function getCockpitTrend(account: DemoAccount) {
   return call('company.trend', () => {
     requireCompanyFinance(account);
-    return MONTHS.map((m) => {
+    return activeMonths().map((m) => {
       const c = companyMonthMetrics(m);
       return {
         period: m,
@@ -533,7 +534,7 @@ export function getTimeAllocationView(account: DemoAccount) {
   return call('company.timeAllocation', () => {
     requireCompanyFinance(account);
     // Aggregate only, fixed category order (§9.3); no per-person surfaces (R7).
-    return MONTHS.map((m) => {
+    return activeMonths().map((m) => {
       const c = companyMonthMetrics(m);
       const projectLabour = c.perProject.reduce((s, x) => s + x.labour, 0);
       return {
@@ -564,7 +565,7 @@ export function lockPeriod(account: DemoAccount, yearMonth: YearMonth) {
     if (p.tieOut === 'red') throw new Error('tie_out_red'); // R3: refuse while red
     p.status = 'locked';
     p.lockedByUserId = account.userId;
-    p.lockedAt = `${FIXTURE_TODAY}T12:00:00Z`;
+    p.lockedAt = `${todayStr()}T12:00:00Z`;
     audit({ actorUserId: account.userId, entityType: 'FinancialPeriod', entityId: yearMonth, action: 'lock' });
     return p;
   });
@@ -604,9 +605,9 @@ export function getPerson(account: DemoAccount, personId: string) {
     const person = db.people.find((p) => p.id === personId);
     if (!person) throw new Error('not_found');
     const agreementsAllowed =
-      can(actor, 'view', { type: 'employmentAgreement', personId }, undefined, FIXTURE_TODAY).allow === true;
+      can(actor, 'view', { type: 'employmentAgreement', personId }, undefined, todayStr()).allow === true;
     const ratesAllowed =
-      can(actor, 'view', { type: 'costRate', personId }, undefined, FIXTURE_TODAY).allow === true;
+      can(actor, 'view', { type: 'costRate', personId }, undefined, todayStr()).allow === true;
     return {
       person,
       schedule: db.workSchedules.find((w) => w.personId === personId),
@@ -628,7 +629,7 @@ export function getVerse(account: DemoAccount) {
   return call('people.verse', () => {
     const actor = actorFor(account);
     if (account.isExternal) throw new Error('not_allowed');
-    const rateVisible = can(actor, 'view', { type: 'externalAgreement' }, 'rate', FIXTURE_TODAY).allow === true;
+    const rateVisible = can(actor, 'view', { type: 'externalAgreement' }, 'rate', todayStr()).allow === true;
     return db.collaborators.map((c) => ({
       collaborator: c,
       agreements: db.externalAgreements
@@ -679,7 +680,7 @@ export function getTemplates(account: DemoAccount) {
 export function getAudit(account: DemoAccount) {
   return call('admin.audit', () => {
     const actor = actorFor(account);
-    const d = can(actor, 'view', { type: 'auditLog' }, undefined, FIXTURE_TODAY);
+    const d = can(actor, 'view', { type: 'auditLog' }, undefined, todayStr());
     if (d.allow !== true) throw new Error('not_allowed');
     return [...db.auditRecords].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
   });
@@ -714,4 +715,7 @@ export function acceptQuotation(account: DemoAccount, quotationId: string) {
   });
 }
 
-export { FIXTURE_TODAY, MONTHS };
+
+
+/** Months the console reasons over (dataset window through the real today). */
+export const MONTHS = activeMonths();

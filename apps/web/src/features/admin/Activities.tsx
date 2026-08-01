@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getActivities } from '../../api/queries';
 import { Banner, LedgerTable, PageHeader, Td, Th } from '../../components/ui';
 
@@ -11,7 +11,7 @@ const CHECK = <span aria-label="yes" className="text-positive">✓</span>;
 const CROSS = <span aria-label="no" className="text-ink-faint">✗</span>;
 
 export default function Activities() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const activities = useQuery({ queryKey: ['activities', account.userId], queryFn: () => getActivities(account) });
 
   if (activities.isError) {

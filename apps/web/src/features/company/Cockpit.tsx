@@ -5,13 +5,13 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getCockpit, getCockpitTrend, MONTHS } from '../../api/queries';
 import { Banner, Card, LedgerTable, PageHeader, Stat, StatusChip, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPct, fmtPeriod } from '../../lib/format';
 
 export default function Cockpit() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const [month, setMonth] = useState('2026-05');
   const cockpit = useQuery({
     queryKey: ['cockpit', account.userId, month],

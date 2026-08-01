@@ -5,14 +5,14 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getPerson } from '../../api/queries';
 import { Banner, Card, LedgerTable, PageHeader, Stat, StatusChip, Td, Th } from '../../components/ui';
 import { fmtDate, fmtMoneyWhole } from '../../lib/format';
 
 export default function PersonProfile() {
   const { personId = '' } = useParams();
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const person = useQuery({
     queryKey: ['person', account.userId, personId],
     queryFn: () => getPerson(account, personId),

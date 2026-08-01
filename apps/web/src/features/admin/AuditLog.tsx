@@ -3,12 +3,12 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getAudit } from '../../api/queries';
 import { Banner, LedgerTable, PageHeader, StatusChip, Td, Th } from '../../components/ui';
 
 export default function AuditLog() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const audit = useQuery({ queryKey: ['audit', account.userId], queryFn: () => getAudit(account) });
 
   if (audit.isError) {

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getWeek, copyDay } from '../../api/queries';
 import { Button, Card, PageHeader, StatusChip } from '../../components/ui';
 import { fmtDateShort } from '../../lib/format';
@@ -19,7 +19,7 @@ function addDays(date: string, n: number): string {
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function Week() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const today = useSession((s) => s.today);
   const [monday, setMonday] = useState(mondayOf(today));
   const qc = useQueryClient();

@@ -2,13 +2,13 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getMonthEntries, MONTHS } from '../../api/queries';
 import { Card, LedgerTable, PageHeader, Th, Td, StatusChip } from '../../components/ui';
 import { fmtDate, fmtPeriod } from '../../lib/format';
 
 export default function History() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const [month, setMonth] = useState(MONTHS[MONTHS.length - 1]!);
   const entries = useQuery({
     queryKey: ['history', account.userId, month],

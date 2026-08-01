@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getCockpitTrend, getPortfolio, getTimeAllocationView } from '../../api/queries';
 import { Banner, Card, LedgerTable, PageHeader, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPct, fmtPeriod } from '../../lib/format';
@@ -17,7 +17,7 @@ const REPORTS = [
 ] as const;
 
 export default function ReportLibrary() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const [active, setActive] = useState<(typeof REPORTS)[number]['key']>('portfolio');
   const portfolio = useQuery({ queryKey: ['portfolio', account.userId], queryFn: () => getPortfolio(account) });
   const trend = useQuery({ queryKey: ['cockpit-trend', account.userId], queryFn: () => getCockpitTrend(account), enabled: active === 'monthly' });

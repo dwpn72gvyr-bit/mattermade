@@ -3,12 +3,12 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getInsights } from '../../api/queries';
 import { Card, EmptyState, PageHeader, Stat } from '../../components/ui';
 
 export default function Insights() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const insights = useQuery({
     queryKey: ['insights', account.userId],
     queryFn: () => getInsights(account),

@@ -3,13 +3,13 @@
 
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getPeriods, lockPeriod, reopenPeriod } from '../../api/queries';
 import { Banner, Button, LedgerTable, PageHeader, StatusChip, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPeriod } from '../../lib/format';
 
 export default function Periods() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const qc = useQueryClient();
   const periods = useQuery({ queryKey: ['periods', account.userId], queryFn: () => getPeriods(account) });
   const [reopenTarget, setReopenTarget] = useState<string | null>(null);

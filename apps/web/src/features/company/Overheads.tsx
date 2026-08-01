@@ -4,13 +4,13 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { companyOverheadSchema } from '@oe/domain';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getOverheads } from '../../api/queries';
 import { Banner, Button, Card, LedgerTable, PageHeader, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole } from '../../lib/format';
 
 export default function Overheads() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const overheads = useQuery({
     queryKey: ['overheads', account.userId],
     queryFn: () => getOverheads(account),

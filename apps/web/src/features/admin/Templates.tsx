@@ -2,12 +2,12 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getTemplates } from '../../api/queries';
 import { Banner, Card, PageHeader } from '../../components/ui';
 
 export default function Templates() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const templates = useQuery({ queryKey: ['templates', account.userId], queryFn: () => getTemplates(account) });
 
   if (templates.isError) {

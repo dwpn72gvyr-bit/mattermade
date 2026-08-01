@@ -4,13 +4,13 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from '../../stores/session';
+import { useAccount, useSession } from '../../stores/session';
 import { getMyVerseWork } from '../../api/queries';
 import { Banner, Card, PageHeader, Stat, StatusChip } from '../../components/ui';
 import { fmtDate, fmtMoneyWhole } from '../../lib/format';
 
 export default function Portal() {
-  const account = useSession((s) => s.account);
+  const account = useAccount();
   const work = useQuery({ queryKey: ['verse-portal', account.userId], queryFn: () => getMyVerseWork(account) });
 
   if (work.isError) {
