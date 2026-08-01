@@ -64,3 +64,10 @@ people manager, leadership, single-project lead and an OE Verse freelancer.
 52 checks cover function, permission masking, report accuracy against the
 worked examples, period lock and reopen guards, the variation flow, the
 discount floor confirmation and the payroll guard.
+
+## Deploying (Railway)
+
+The repo ships a multi-stage `Dockerfile` and `railway.json`. Railway builds the
+workspace with pnpm, bundles `apps/web`, and serves the static SPA through
+`apps/web/server.mjs` (dependency-free, binds `0.0.0.0:$PORT`, SPA fallback,
+immutable caching for hashed assets). No environment variables are required.
