@@ -3,18 +3,19 @@
 // side (F15), milestones, team, risks, and the two primary actions. The same
 // project renders differently for lead, finance and team member (§11 A6).
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useSession } from '../../stores/session';
 import { getProject, submitVariation, approveVariation } from '../../api/queries';
 import { addProjectNote, getProjectNotes } from '../../api/projectOps';
+import { projectOvertime } from '../../api/metrics';
 import { Link } from 'react-router-dom';
 import {
   Banner, BurnBar, Button, Card, EstimateVsActual, LedgerTable, Masked,
   PageHeader, Stat, StatusChip, Td, Th,
 } from '../../components/ui';
-import { fmtDate, fmtMoneyWhole, fmtPct } from '../../lib/format';
+import { fmtDate, fmtHours, fmtMoneyWhole, fmtPct } from '../../lib/format';
 
 const TABS = ['Health', 'Phases', 'Notes', 'Financials', 'External', 'Revenue', 'Variations', 'Retrospective'] as const;
 type Tab = (typeof TABS)[number];
@@ -29,6 +30,12 @@ export default function ProjectOverview() {
   });
   const [tab, setTab] = useState<Tab>('Health');
   const [showVariationForm, setShowVariationForm] = useState(false);
+  // Complimentary overtime lens (round F): hours the team mapped beyond their
+  // scheduled days. Valued for scale only; never part of official costing.
+  const overtime = useMemo(
+    () => projectOvertime(projectId),
+    [projectId, detail.dataUpdatedAt],
+  );
 
   if (detail.isError) {
     return <Banner tone="info">This area isn't part of your access. If it should be, Ryan or the ops team can grant it.</Banner>;
@@ -270,6 +277,36 @@ export default function ProjectOverview() {
                 </tr>
               ))}
             </LedgerTable>
+          )}
+          {overtime.minutes > 0 && (
+            <Card as="section">
+              <h2 className="display text-lg mb-1">With the team's compliments</h2>
+              <p className="text-sm text-ink-muted mb-3 max-w-2xl">
+                Hours the team mapped beyond their scheduled days, given freely to this project.
+                They are valued at paid rates for scale only. These figures sit outside the
+                official gross profit above and change nothing in it.
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <Stat label="Complimentary hours" value={fmtHours(overtime.minutes)} />
+                <Stat
+                  label="Value at paid rates"
+                  value={fmtMoneyWhole(overtime.complimentaryValueMinor)}
+                  sub="for scale, never a cost"
+                />
+              </div>
+              <LedgerTable
+                caption="Complimentary hours by person"
+                head={<tr><Th>Person</Th><Th num>Hours</Th><Th num>Value at paid rate</Th></tr>}
+              >
+                {overtime.byPerson.map((p) => (
+                  <tr key={p.personId}>
+                    <Td>{p.name}</Td>
+                    <Td num>{fmtHours(p.minutes)}</Td>
+                    <Td num>{fmtMoneyWhole(p.valueMinor)}</Td>
+                  </tr>
+                ))}
+              </LedgerTable>
+            </Card>
           )}
         </div>
       )}

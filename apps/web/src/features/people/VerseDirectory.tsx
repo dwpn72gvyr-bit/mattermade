@@ -1,26 +1,39 @@
 // OE Verse (client direction, item 10): the searchable talent book. Search
 // drives verse.search with a short debounce; category chips narrow the list.
+// Round F: sort by name, country or city; categories and engagements are
+// multi-value, so a card shows the first category and every engagement.
 // Rates never appear on cards; they live on the profile, behind S4.
 
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../../stores/session';
-import { searchVerse, VERSE_CATEGORIES } from '../../api/verseApi';
+import { searchVerse, locationParts } from '../../api/verseApi';
+import { optionList } from '../../api/settings';
 import { Banner, Button, Card, PageHeader, StatusChip, NewBadge } from '../../components/ui';
 import { Stars, VerseProfileEditor, VERSE_EDITOR_ROLES } from './CollaboratorProfile';
 
 const field = 'w-full border border-line rounded-financial bg-raised px-3 py-2 text-base';
 
+type SortKey = 'name' | 'country' | 'city';
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'country', label: 'Country' },
+  { key: 'city', label: 'City' },
+];
+
 export default function VerseDirectory() {
   const account = useAccount();
-  const navigate = useNavigate();
   const canEdit = VERSE_EDITOR_ROLES.some((r) => account.roles.includes(r));
 
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortKey>('name');
   const [adding, setAdding] = useState(false);
+
+  const categoryOptions = useMemo(() => optionList('verse_categories'), []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query), 300);
@@ -36,9 +49,16 @@ export default function VerseDirectory() {
     return <Banner tone="info">This area isn't part of your access. If it should be, Ryan or the ops team can grant it.</Banner>;
   }
 
-  const entries = (verse.data ?? []).filter(
-    (e) => !category || e.profile.category === category,
-  );
+  const entries = (verse.data ?? [])
+    .filter((e) => !category || e.profile.categories.includes(category))
+    .sort((a, b) => {
+      if (sort === 'name') return a.collaborator.name.localeCompare(b.collaborator.name);
+      const la = locationParts(a.collaborator.location)[sort];
+      const lb = locationParts(b.collaborator.location)[sort];
+      // Blank locations settle to the end of the list.
+      if (!la || !lb) return (la ? 0 : 1) - (lb ? 0 : 1) || a.collaborator.name.localeCompare(b.collaborator.name);
+      return la.localeCompare(lb) || a.collaborator.name.localeCompare(b.collaborator.name);
+    });
 
   if (adding) {
     return (
@@ -48,10 +68,8 @@ export default function VerseDirectory() {
           lede="A new collaborator profile: who they are, what they do, how it went."
         />
         <VerseProfileEditor
-          onDone={(collaboratorId) => {
-            setAdding(false);
-            if (collaboratorId) navigate(`/verse/${collaboratorId}`);
-          }}
+          onDone={() => setAdding(false)}
+          onBackToDirectory={() => setAdding(false)}
         />
       </div>
     );
@@ -69,8 +87,8 @@ export default function VerseDirectory() {
         }
       />
 
-      <div className="mb-3 max-w-sm">
-        <label className="block">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-3">
+        <label className="block w-full max-w-sm">
           <span className="sr-only">Search the Verse</span>
           <input
             type="search"
@@ -80,6 +98,21 @@ export default function VerseDirectory() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
+        <div className="flex items-center gap-1.5" role="group" aria-label="Sort the list">
+          <span className="text-sm text-ink-muted mr-0.5">Sort by</span>
+          {SORTS.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSort(s.key)}
+              aria-pressed={sort === s.key}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors duration-settle ${
+                sort === s.key ? 'border-accent bg-accent text-white' : 'border-line bg-raised text-ink-muted hover:text-ink'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5 mb-5" role="group" aria-label="Filter by category">
@@ -92,7 +125,7 @@ export default function VerseDirectory() {
         >
           All
         </button>
-        {VERSE_CATEGORIES.map((cat) => (
+        {categoryOptions.map((cat) => (
           <button
             key={cat}
             onClick={() => setCategory((cur) => (cur === cat ? null : cat))}
@@ -112,11 +145,13 @@ export default function VerseDirectory() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <Link to={`/verse/${c.id}`} className="font-medium text-base hover:text-accent">{c.name}</Link><NewBadge createdAt={c.createdAt} />
-                <div className="text-sm text-ink-muted">{p.category ?? c.discipline}</div>
+                <div className="text-sm text-ink-muted">{p.categories[0] ?? c.discipline}</div>
                 <div className="text-xs text-ink-faint">{c.location}</div>
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
-                {p.engagement && <StatusChip tone="info">{p.engagement}</StatusChip>}
+                {p.engagements.map((en) => (
+                  <StatusChip key={en} tone="info">{en}</StatusChip>
+                ))}
                 {p.engagedBefore && <StatusChip tone="positive">Engaged before</StatusChip>}
               </div>
             </div>

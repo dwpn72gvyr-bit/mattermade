@@ -66,9 +66,9 @@ const HEADERS = {
   ],
   project_notes: ['id', 'project_id', 'author_user_id', 'author_name', 'created_at', 'body'],
   verse_profiles: [
-    'collaborator_id', 'website', 'instagram', 'email', 'contact_no', 'category',
-    'capabilities', 'engagement', 'engaged_before', 'craft_rating',
-    'personality_rating', 'rates_note', 'notes',
+    'collaborator_id', 'website', 'instagram', 'email', 'contact_no', 'categories',
+    'capabilities', 'engagements', 'engaged_before', 'craft_rating',
+    'personality_rating', 'rates_note', 'notes', 'added_at', 'updated_at',
   ],
 } as const;
 
@@ -112,9 +112,10 @@ export function buildBackupCsv(): string {
   ]));
   section('verse_profiles', db.verseProfiles.map((v) => [
     v.collaboratorId, v.website ?? '', v.instagram ?? '', v.email ?? '',
-    v.contactNo ?? '', v.category ?? '', joinList(v.capabilities),
-    v.engagement ?? '', yesNo(v.engagedBefore), v.craftRating ?? '',
+    v.contactNo ?? '', joinList(v.categories), joinList(v.capabilities),
+    joinList(v.engagements), yesNo(v.engagedBefore), v.craftRating ?? '',
     v.personalityRating ?? '', v.ratesNote ?? '', v.notes ?? '',
+    v.addedAt ?? '', v.updatedAt ?? '',
   ]));
 
   return lines.join('\r\n');
@@ -318,14 +319,18 @@ export function restoreFromCsv(account: DemoAccount, text: string) {
               instagram: r.instagram || undefined,
               email: r.email || undefined,
               contactNo: r.contact_no || undefined,
-              category: r.category || undefined,
+              // Older backups carried single "category"/"engagement" columns;
+              // both shapes restore into the multi-value lists.
+              categories: splitList(r.categories ?? r.category ?? ''),
               capabilities: splitList(r.capabilities ?? ''),
-              engagement: (r.engagement || undefined) as VerseProfile['engagement'],
+              engagements: splitList(r.engagements ?? r.engagement ?? ''),
               engagedBefore: r.engaged_before?.trim().toLowerCase() === 'yes',
               craftRating: r.craft_rating?.trim() ? Number(r.craft_rating) : undefined,
               personalityRating: r.personality_rating?.trim() ? Number(r.personality_rating) : undefined,
               ratesNote: r.rates_note || undefined,
               notes: r.notes || undefined,
+              addedAt: r.added_at || undefined,
+              updatedAt: r.updated_at || undefined,
             }) satisfies VerseProfile);
           restored.verse_profiles = db.verseProfiles.length;
           break;

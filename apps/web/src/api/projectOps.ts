@@ -17,7 +17,11 @@ export interface ProjectInput {
   id?: string;
   name: string;
   clientName: string;
+  /** Primary service line (the first selected), kept for domain compatibility. */
   serviceLine: string;
+  /** Round F: the full multi-select. Stored on the db object; the domain
+   *  Project type stays unchanged. */
+  serviceLines?: string[];
   currency?: string;
   contractValueMinor?: number;
   startDate: string;
@@ -25,8 +29,12 @@ export interface ProjectInput {
   leadUserId?: string;
   teamPersonIds: string[];
   status?: Project['status'];
-  phases?: { name: string; estHoursByRole?: Record<string, number> }[];
+  phases?: { id?: string; name: string; estHoursByRole?: Record<string, number> }[];
 }
+
+/** Projects carry the full service-line list alongside the domain type's
+ *  single primary line (round F). */
+type ProjectWithLines = Project & { serviceLines?: string[] };
 
 function ensureClient(name: string, createdBy: string): string {
   const existing = db.clients.find((c) => c.name.toLowerCase() === name.toLowerCase());
@@ -61,6 +69,50 @@ function buildPhases(projectId: string, input: ProjectInput, createdBy: string):
   }));
 }
 
+/** Reconcile an existing project's phases with the editor's list (round F):
+ *  rows keep their identity by id, so recorded hours stay attached; order
+ *  follows the editor (drag reorder); new rows become new phases; removed
+ *  rows go unless time has already landed on them, in which case they keep
+ *  their history and settle to the end of the list. */
+function syncPhases(p: Project, input: ProjectInput, by: string): void {
+  const phases = input.phases ?? [];
+  const current = db.phases.filter((ph) => ph.projectId === p.id);
+  const kept = new Set<string>();
+  phases.forEach((ip, i) => {
+    const found = ip.id ? current.find((ph) => ph.id === ip.id) : undefined;
+    if (found) {
+      found.name = ip.name;
+      found.order = i + 1;
+      if (ip.estHoursByRole) found.estHoursByRole = ip.estHoursByRole;
+      found.updatedAt = nowIso();
+      found.updatedBy = by;
+      kept.add(found.id);
+    } else {
+      const ph: ProjectPhase = {
+        id: newId('ph'),
+        createdAt: nowIso(), createdBy: by, updatedAt: nowIso(), updatedBy: by,
+        projectId: p.id,
+        name: ip.name,
+        order: i + 1,
+        status: 'not_started',
+        estHoursByRole: ip.estHoursByRole ?? {},
+        plannedStart: dateAt(input.startDate, input.targetEndDate, i / phases.length),
+        plannedEnd: dateAt(input.startDate, input.targetEndDate, (i + 1) / phases.length),
+      };
+      db.phases.push(ph);
+      kept.add(ph.id);
+    }
+  });
+  const hasTime = (phaseId: string) => db.timeEntries.some((te) => te.phaseId === phaseId);
+  db.phases = db.phases.filter(
+    (ph) => ph.projectId !== p.id || kept.has(ph.id) || hasTime(ph.id),
+  );
+  let tail = phases.length;
+  for (const ph of db.phases) {
+    if (ph.projectId === p.id && !kept.has(ph.id)) { tail += 1; ph.order = tail; }
+  }
+}
+
 /** Create or update a project. Team and lead assignment included (item 4). */
 export function saveProject(account: DemoAccount, input: ProjectInput) {
   return call('projects.save', () => {
@@ -83,6 +135,8 @@ export function saveProject(account: DemoAccount, input: ProjectInput) {
         updatedAt: nowIso(),
         updatedBy: account.userId,
       });
+      (p as ProjectWithLines).serviceLines = input.serviceLines ?? [input.serviceLine];
+      if (input.phases?.length) syncPhases(p, input, account.userId);
       return p;
     }
 
@@ -105,6 +159,7 @@ export function saveProject(account: DemoAccount, input: ProjectInput) {
       targetEndDate: input.targetEndDate,
       isProBono: false,
       riskFlags: [],
+      serviceLines: input.serviceLines ?? [input.serviceLine],
     } as Project;
     db.projects.push(project);
     db.phases.push(...buildPhases(id, input, account.userId));

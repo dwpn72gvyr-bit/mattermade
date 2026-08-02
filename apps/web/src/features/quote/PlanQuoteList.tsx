@@ -1,19 +1,32 @@
 // Plan & Quote entry: quotations in play, and the door into the single-screen
-// estimating workbench for the project being estimated (§8).
+// estimating workbench for the project being estimated (§8). The super admin
+// can start a fresh estimate from here (round F).
 
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { useAccount, useSession } from '../../stores/session';
-import { getQuotations } from '../../api/queries';
-import { Banner, LedgerTable, PageHeader, StatusChip, Td, Th } from '../../components/ui';
+import { Link, useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAccount } from '../../stores/session';
+import { createDraftQuotation, getQuotations } from '../../api/queries';
+import { Banner, Button, LedgerTable, PageHeader, StatusChip, Td, Th } from '../../components/ui';
 import { fmtDate, fmtMoneyWhole } from '../../lib/format';
 
 export default function PlanQuoteList() {
   const account = useAccount();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const quotes = useQuery({
     queryKey: ['quotations', account.userId],
     queryFn: () => getQuotations(account),
+  });
+
+  const isSuper = account.roles.includes('super_admin');
+
+  const createDraft = useMutation({
+    mutationFn: () => createDraftQuotation(account),
+    onSuccess: (q) => {
+      qc.invalidateQueries({ queryKey: ['quotations'] });
+      navigate(`/plan-quote/${q.id}`);
+    },
   });
 
   if (quotes.isError) {
@@ -35,7 +48,17 @@ export default function PlanQuoteList() {
       <PageHeader
         title="Plan & Quote"
         lede="Each estimate opens as a single workbench: structure, scope of work, externals, the price ladder and the scenarios on one page, every figure responding live to every edit, with approval converting the chosen model straight into a project."
+        actions={
+          isSuper ? (
+            <Button variant="primary" onClick={() => createDraft.mutate()} disabled={createDraft.isPending}>
+              New estimate
+            </Button>
+          ) : undefined
+        }
       />
+      {createDraft.isError && (
+        <Banner tone="critical" className="mb-3">That didn't save. Try again in a moment.</Banner>
+      )}
       <LedgerTable
         caption="Quotations"
         head={<tr><Th>Project</Th><Th>Version</Th><Th>Issued</Th><Th>Status</Th><Th num>Total (incl GST)</Th><Th /></tr>}

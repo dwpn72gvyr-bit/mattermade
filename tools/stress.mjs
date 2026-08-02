@@ -16,6 +16,10 @@ function check(persona, name, ok, detail = '') {
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', headless: true });
 const page = await browser.newPage();
+// Fail fast on selectors: a stale one should report a failure, not stall the
+// suite. Navigation keeps a generous budget for the dev server's first compile.
+page.setDefaultTimeout(8000);
+page.setDefaultNavigationTimeout(45000);
 page.on('pageerror', (e) => consoleErrors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => {
   if (m.type() === 'error') consoleErrors.push(`console: ${m.text().slice(0, 200)}`);
@@ -35,6 +39,14 @@ async function switchTo(userId) {
 }
 
 async function navTexts() {
+  // Round F: sections collapse by default, so open every group before reading.
+  const closed = page.locator('aside nav button[aria-expanded="false"]');
+  let guard = 0;
+  while ((await closed.count()) > 0 && guard < 12) {
+    await closed.first().click();
+    await page.waitForTimeout(80);
+    guard += 1;
+  }
   return page.locator('aside nav a').allTextContents();
 }
 
@@ -85,12 +97,30 @@ await switchTo('usr-mei');
 
   // Stepper +15 on the new entry.
   const plus = page.locator('button[aria-label="Extend Internal meeting by 15 minutes"]').first();
+  const hoursField = page.locator('input[aria-label="Hours for Internal meeting"]').first();
   if (await plus.count()) {
+    const before15 = Number(await hoursField.inputValue());
     await plus.click();
     await page.waitForTimeout(500);
-    check('Mei', 'stepper extends entry by 15m', (await bodyText()).match(/1h 15m/) !== null);
+    const after15 = Number(await hoursField.inputValue());
+    check('Mei', 'stepper extends entry by 15m', after15 - before15 === 0.25, `${before15} -> ${after15}`);
+    // Round F: the same duration can be typed directly.
+    await hoursField.fill('2.5');
+    await hoursField.press('Enter');
+    await page.waitForTimeout(700);
+    check('Mei', 'typed hours accepted on an entry', (await hoursField.inputValue()) === '2.5');
+    await hoursField.fill('-3');
+    await hoursField.press('Enter');
+    await page.waitForTimeout(400);
+    check('Mei', 'negative typed hours refused',
+      (await hoursField.getAttribute('aria-invalid')) === 'true' || (await hoursField.inputValue()) !== '-3');
+    await hoursField.fill('2.5');
+    await hoursField.press('Enter');
+    await page.waitForTimeout(400);
   } else {
     check('Mei', 'stepper extends entry by 15m', false, 'stepper not found');
+    check('Mei', 'typed hours accepted on an entry', false, 'hours field not found');
+    check('Mei', 'negative typed hours refused', false, 'hours field not found');
   }
 
   await page.goto(`${BASE}/week`, { waitUntil: 'networkidle' });
@@ -236,7 +266,7 @@ await switchTo('usr-ryan');
   await page.goto(`${BASE}/plan-quote`, { waitUntil: 'networkidle' });
   const pq = await bodyText();
   check('Ryan', 'Plan & Quote lists Harbourline draft', /Harbourline/.test(pq));
-  const link = page.locator('a:has-text("Continue estimating"), a:has-text("Open")').first();
+  const link = page.locator('main a:has-text("Continue estimating"), main a:has-text("Open")').first();
   await link.click();
   await page.waitForTimeout(800);
   const price = await bodyText();
@@ -343,6 +373,60 @@ await switchTo('usr-aiko');
   await page.goto(`${BASE}/company`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1400);
   check('Aiko', 'company denied for external', /isn't part of your access/.test(await bodyText()));
+}
+
+// ---------------------------------------------------------------- Round F (Ryan)
+await switchTo('usr-ryan');
+{
+  // Theme system: the sidebar toggle flips the dark class on <html>.
+  await page.click('aside [role="group"][aria-label="Theme"] button:has-text("dark")');
+  await page.waitForTimeout(200);
+  check('RoundF', 'dark mode class applies from toggle',
+    await page.evaluate(() => document.documentElement.classList.contains('dark')));
+  await page.click('aside [role="group"][aria-label="Theme"] button:has-text("light")');
+  await page.waitForTimeout(200);
+  check('RoundF', 'light mode restores',
+    await page.evaluate(() => !document.documentElement.classList.contains('dark')));
+
+  await page.goto(`${BASE}/styleguide`, { waitUntil: 'networkidle' });
+  const style = await bodyText();
+  check('RoundF', 'styleguide carries brand palette', /Craft Orange/.test(style) && /#FC712B/.test(style));
+  check('RoundF', 'styleguide names the brand typefaces', /Manrope/.test(style) && /Roboto Mono/.test(style));
+
+  await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle' });
+  const settings = await bodyText();
+  check('RoundF', 'console settings has NEW window control', /New-item window/.test(settings));
+  check('RoundF', 'console settings has option lists', /Option lists/.test(settings) && /Service lines/.test(settings));
+
+  await page.goto(`${BASE}/admin/backup`, { waitUntil: 'networkidle' });
+  const backup = await bodyText();
+  check('RoundF', 'data backup screen renders', /Download a backup now/.test(backup) && /Restore from a CSV/.test(backup));
+
+  // Leads: inline validation blocks a (TBC) value; a good lead earns a New badge.
+  await page.click('aside nav >> text=Leads & pipeline');
+  await page.waitForTimeout(900);
+  await page.click('button:has-text("Add lead")');
+  await page.waitForTimeout(300);
+  await page.fill('label:has-text("Opportunity name") input', 'Stress Lead Round F');
+  await page.fill('label:has-text("Organisation") input', 'Stress Org');
+  await page.fill('label:has-text("Estimated fee") input', '(TBC)');
+  await page.waitForTimeout(200);
+  const feeMsgVisible = await page.locator('text=Use a number in whole SGD').isVisible();
+  const submitDisabled = await page.locator('form button:has-text("Add lead"), div button:has-text("Add lead")').last().isDisabled();
+  check('RoundF', 'lead fee (TBC) flags red inline', feeMsgVisible);
+  check('RoundF', 'lead submit disabled while fee invalid', submitDisabled);
+  await page.fill('label:has-text("Estimated fee") input', '42000');
+  await page.waitForTimeout(200);
+  await page.locator('button:has-text("Add lead")').last().click();
+  await page.waitForTimeout(900);
+  const board = await bodyText();
+  check('RoundF', 'valid lead lands on the board', /Stress Lead Round F/.test(board));
+  // The badge renders uppercase through the brand label style, so assert on the
+  // element rather than the casing of its rendered text.
+  const newBadges = page.locator('main span:has-text("New")');
+  check('RoundF', 'fresh lead carries the New badge',
+    (await newBadges.count()) > 0 && /NEW/i.test(board));
+  check('RoundF', 'board explains drag and drop', /Drag a card between stages/.test(board));
 }
 
 // ---------------------------------------------------------------- summary

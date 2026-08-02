@@ -1,16 +1,16 @@
 // OE Verse talent book (client direction, item 10): searchable, editable,
 // single-page profiles with the full field set the studio tracks. Rates stay
-// S4: visible to finance, ops and leadership only.
+// S4: visible to finance, ops and leadership only. Round F: categories and
+// engagements are multi-value, profiles carry added/updated dates, and the
+// directory can sort by name, country or city.
 
 import { can } from '@oe/policy';
 import type { Collaborator } from '@oe/domain';
 import { call } from './transport';
-import { db, newId, nowIso, type VerseProfile, VERSE_CATEGORIES, VERSE_CAPABILITIES } from './db';
+import { db, newId, nowIso, type VerseProfile } from './db';
 import { hasModule, todayStr } from './settings';
 import { actorFor } from './actor';
 import type { DemoAccount } from './demoAccounts';
-
-export { VERSE_CATEGORIES, VERSE_CAPABILITIES };
 
 export interface VerseEntry {
   collaborator: Collaborator;
@@ -20,10 +20,20 @@ export interface VerseEntry {
   agreements: { id: string; model: string; status: string; feeMinor?: number; rateMinor?: number; currency: string }[];
 }
 
+/** Split a stored "City, Country" location string. A single token counts as
+ *  both, so city-state entries like "Singapore" sort sensibly either way. */
+export function locationParts(location: string | undefined): { city: string; country: string } {
+  const s = (location ?? '').trim();
+  if (!s) return { city: '', country: '' };
+  const i = s.lastIndexOf(',');
+  if (i < 0) return { city: s, country: s };
+  return { city: s.slice(0, i).trim(), country: s.slice(i + 1).trim() };
+}
+
 function profileFor(collaboratorId: string): VerseProfile {
   let p = db.verseProfiles.find((v) => v.collaboratorId === collaboratorId);
   if (!p) {
-    p = { collaboratorId, capabilities: [], engagedBefore: false };
+    p = { collaboratorId, categories: [], capabilities: [], engagements: [], engagedBefore: false };
     db.verseProfiles.push(p);
   }
   return p;
@@ -63,7 +73,9 @@ export function searchVerse(account: DemoAccount, query = '') {
         if (!q) return true;
         const hay = [
           e.collaborator.name, e.collaborator.discipline, e.collaborator.location,
-          e.profile.category, e.profile.engagement, e.profile.notes,
+          e.profile.notes,
+          ...(e.profile.categories ?? []),
+          ...(e.profile.engagements ?? []),
           ...(e.profile.capabilities ?? []),
           ...e.projects.map((p) => p.name),
         ].filter(Boolean).join(' ').toLowerCase();
@@ -83,9 +95,9 @@ export interface VerseProfileInput {
   instagram?: string;
   email?: string;
   contactNo?: string;
-  category?: string;
+  categories: string[];
   capabilities: string[];
-  engagement?: VerseProfile['engagement'];
+  engagements: string[];
   notes?: string;
   ratesNote?: string;
   engagedBefore: boolean;
@@ -110,7 +122,7 @@ export function saveVerseProfile(account: DemoAccount, input: VerseProfileInput)
         createdAt: nowIso(), createdBy: account.userId,
         updatedAt: nowIso(), updatedBy: account.userId,
         name: input.fullName,
-        discipline: input.discipline ?? input.category ?? 'Collaborator',
+        discipline: input.discipline ?? input.categories[0] ?? 'Collaborator',
         location: input.location ?? 'Singapore',
         country: input.country ?? 'SG',
         defaultCurrency: 'SGD',
@@ -120,6 +132,7 @@ export function saveVerseProfile(account: DemoAccount, input: VerseProfileInput)
       collaborator.name = input.fullName;
       if (input.discipline) collaborator.discipline = input.discipline;
       if (input.location) collaborator.location = input.location;
+      if (input.country) collaborator.country = input.country;
       collaborator.updatedAt = nowIso();
       collaborator.updatedBy = account.userId;
     }
@@ -130,14 +143,16 @@ export function saveVerseProfile(account: DemoAccount, input: VerseProfileInput)
       instagram: input.instagram,
       email: input.email,
       contactNo: input.contactNo,
-      category: input.category,
+      categories: input.categories,
       capabilities: input.capabilities,
-      engagement: input.engagement,
+      engagements: input.engagements,
       notes: input.notes,
       ratesNote: input.ratesNote,
       engagedBefore: input.engagedBefore,
       craftRating: input.craftRating,
       personalityRating: input.personalityRating,
+      addedAt: profile.addedAt ?? todayStr(),
+      updatedAt: todayStr(),
     });
     return { collaborator, profile };
   });

@@ -205,3 +205,69 @@ export function addOption(key: OptionListKey, value: string): void {
   if (current.includes(v)) return;
   setOptionList(key, [...current, v]);
 }
+
+// ---------------------------------------------------------------------------
+// Internal team rate defaults (client direction, round F): the admin-set cost
+// and sell rate per role for the Plan & Quote team rates table. Super admin
+// editable inline in that table; persisted here in the browser like the other
+// console settings. All values are integer minor units per hour.
+// ---------------------------------------------------------------------------
+
+export type TeamRateRoleKey = 'founder' | 'cd' | 'ad' | 'am' | 'designer' | 'acp';
+
+export interface TeamRateDefault {
+  costMinor: number;   // cost rate per hour, minor units
+  sellMinor: number;   // sell rate per hour, minor units
+}
+
+const TEAM_RATES_KEY = 'oe-console-team-rate-defaults';
+
+export const TEAM_RATE_DEFAULTS: Record<TeamRateRoleKey, TeamRateDefault> = {
+  founder: { costMinor: 12_700, sellMinor: 32_000 },
+  cd: { costMinor: 13_000, sellMinor: 23_500 },
+  ad: { costMinor: 10_000, sellMinor: 20_000 },
+  am: { costMinor: 6_000, sellMinor: 12_000 },
+  designer: { costMinor: 5_000, sellMinor: 11_000 },
+  acp: { costMinor: 5_000, sellMinor: 11_000 },
+};
+
+function readTeamRates(): Partial<Record<TeamRateRoleKey, TeamRateDefault>> {
+  try {
+    const raw = storage()?.getItem(TEAM_RATES_KEY);
+    if (raw) return JSON.parse(raw) as Partial<Record<TeamRateRoleKey, TeamRateDefault>>;
+  } catch {
+    // fall through to defaults
+  }
+  return {};
+}
+
+export function teamRateDefault(role: TeamRateRoleKey): TeamRateDefault {
+  const stored = readTeamRates()[role];
+  const base = TEAM_RATE_DEFAULTS[role];
+  if (!stored) return { ...base };
+  return {
+    costMinor: Number.isFinite(stored.costMinor) && stored.costMinor >= 0 ? stored.costMinor : base.costMinor,
+    sellMinor: Number.isFinite(stored.sellMinor) && stored.sellMinor >= 0 ? stored.sellMinor : base.sellMinor,
+  };
+}
+
+export function teamRateDefaults(): Record<TeamRateRoleKey, TeamRateDefault> {
+  return {
+    founder: teamRateDefault('founder'),
+    cd: teamRateDefault('cd'),
+    ad: teamRateDefault('ad'),
+    am: teamRateDefault('am'),
+    designer: teamRateDefault('designer'),
+    acp: teamRateDefault('acp'),
+  };
+}
+
+export function setTeamRateDefault(role: TeamRateRoleKey, patch: Partial<TeamRateDefault>): void {
+  const all = readTeamRates();
+  const current = teamRateDefault(role);
+  all[role] = {
+    costMinor: Math.max(0, Math.round(patch.costMinor ?? current.costMinor)),
+    sellMinor: Math.max(0, Math.round(patch.sellMinor ?? current.sellMinor)),
+  };
+  storage()?.setItem(TEAM_RATES_KEY, JSON.stringify(all));
+}

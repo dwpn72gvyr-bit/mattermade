@@ -29,6 +29,30 @@ export interface ProjectNote {
   createdAt: string;
 }
 
+/** A payment tranche: one slice of a project's fee, with the date we expect
+ *  the money and the date it actually arrived (client direction, round G).
+ *  Declared during project setup or while the work is still a lead, then kept
+ *  honest as reality lands. */
+export type TrancheStatus = 'expected' | 'invoiced' | 'paid' | 'late' | 'written_off';
+
+export interface PaymentTranche {
+  id: string;
+  /** Set for a live project, or for a lead that has not converted yet. */
+  projectId?: string;
+  leadId?: string;
+  label: string;                // "On signing", "On install", "On completion"
+  amountMinor: number;
+  expectedDate: string;         // when we expect the money
+  actualDate?: string;          // when it actually arrived
+  actualAmountMinor?: number;   // what actually arrived, if it differed
+  status: TrancheStatus;
+  /** Finance set this by hand because Xero could not be reconciled. */
+  manualOverride?: boolean;
+  note?: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
 export type LeadStage = 'tofu' | 'mofu' | 'bofu' | 'converted' | 'parked';
 
 export interface Lead {
@@ -51,37 +75,30 @@ export interface Lead {
   convertedProjectId?: string;
 }
 
-/** OE Verse profile fields the studio tracks (client direction, item 10). */
+/** OE Verse profile fields the studio tracks (client direction, item 10).
+ *  Round F: categories and engagements are multi-value, and the profile keeps
+ *  its own added/updated dates, stamped on save. */
 export interface VerseProfile {
   collaboratorId: string;
   website?: string;
   instagram?: string;
   email?: string;
   contactNo?: string;
-  category?: string;
+  categories: string[];
   capabilities: string[];
-  engagement?: 'Full-time' | 'Freelance' | 'Short Stint' | 'Internship';
+  engagements: string[];
   notes?: string;
   ratesNote?: string;
   engagedBefore: boolean;
   craftRating?: number;         // 1..5
   personalityRating?: number;   // 1..5
+  addedAt?: string;             // ISO date, set on first save
+  updatedAt?: string;           // ISO date, refreshed on every save
 }
 
-export const VERSE_CATEGORIES = [
-  'Design', 'Creative Strategist / Copywriter / Content Planner', 'Producer',
-  'Marketing', 'Activations', 'Creative Strategy', 'Admin', 'Spatial Collaborators',
-  'Interiors', 'Exhibitions', 'Translation', 'Transcreation',
-] as const;
-
-export const VERSE_CAPABILITIES = [
-  'Account Management', 'Marketing', 'Strategy', 'Spatial/Experience Design',
-  'Interior Design', 'Graphic Design', 'Art Direction', 'Branding', 'Content',
-  'Animation', 'Motion Graphics', 'Photography', 'Social Media Content',
-  'Editorial', 'Copywriting', 'Videography / Film', '3D Design', 'Video Editing',
-  'Creative Direction', 'Installation Design', 'Product Design', 'Illustration',
-  'Event / Experiences', 'Digital / UIUX', 'Packaging', 'Publication', 'Rendering',
-] as const;
+// Round F: the verse category and capability choice lists moved to the
+// admin-extendable option lists in api/settings.ts ('verse_categories',
+// 'verse_capabilities', 'verse_engagements').
 
 // ---------------------------------------------------------------------------
 // Period scaffolding to the real current month.
@@ -133,10 +150,10 @@ function scaffoldPeriods(existing: FinancialPeriod[]): FinancialPeriod[] {
 // ---------------------------------------------------------------------------
 
 const SEED_VERSE_PROFILES: VerseProfile[] = [
-  { collaboratorId: 'col-farhan', email: 'farhan@studio.example', category: 'Design', capabilities: ['Motion Graphics', 'Animation', 'Graphic Design'], engagement: 'Freelance', engagedBefore: true, craftRating: 5, personalityRating: 4, notes: 'Also covers lighting documentation for spatial builds.' },
-  { collaboratorId: 'col-nadia', email: 'nadia@curation.example', category: 'Creative Strategy', capabilities: ['Strategy', 'Editorial', 'Event / Experiences'], engagement: 'Freelance', engagedBefore: true, craftRating: 4, personalityRating: 5 },
-  { collaboratorId: 'col-teckheng', category: 'Spatial Collaborators', capabilities: ['Installation Design', 'Spatial/Experience Design'], engagement: 'Freelance', engagedBefore: true, craftRating: 4, personalityRating: 4, notes: 'Workshop in Sungei Kadut; installs with own crew.' },
-  { collaboratorId: 'col-aiko', website: 'https://studioarc.example', category: 'Producer', capabilities: ['Event / Experiences', 'Creative Direction'], engagement: 'Freelance', engagedBefore: true, craftRating: 5, personalityRating: 5 },
+  { collaboratorId: 'col-farhan', email: 'farhan@studio.example', categories: ['Design'], capabilities: ['Motion Graphics', 'Animation', 'Graphic Design'], engagements: ['Freelance'], engagedBefore: true, craftRating: 5, personalityRating: 4, notes: 'Also covers lighting documentation for spatial builds.' },
+  { collaboratorId: 'col-nadia', email: 'nadia@curation.example', categories: ['Creative Strategy'], capabilities: ['Strategy', 'Editorial', 'Event / Experiences'], engagements: ['Freelance'], engagedBefore: true, craftRating: 4, personalityRating: 5 },
+  { collaboratorId: 'col-teckheng', categories: ['Spatial Collaborators'], capabilities: ['Installation Design', 'Spatial/Experience Design'], engagements: ['Freelance'], engagedBefore: true, craftRating: 4, personalityRating: 4, notes: 'Workshop in Sungei Kadut; installs with own crew.' },
+  { collaboratorId: 'col-aiko', website: 'https://studioarc.example', categories: ['Producer'], capabilities: ['Event / Experiences', 'Creative Direction'], engagements: ['Freelance'], engagedBefore: true, craftRating: 5, personalityRating: 5 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -183,8 +200,14 @@ function build() {
 
     // App-side collections.
     projectNotes: [] as ProjectNote[],
+    paymentTranches: [] as PaymentTranche[],
     leads: [] as Lead[],
-    verseProfiles: (fresh ? [] : SEED_VERSE_PROFILES.map((v) => ({ ...v, capabilities: [...v.capabilities] }))) as VerseProfile[],
+    verseProfiles: (fresh ? [] : SEED_VERSE_PROFILES.map((v) => ({
+      ...v,
+      categories: [...v.categories],
+      capabilities: [...v.capabilities],
+      engagements: [...v.engagements],
+    }))) as VerseProfile[],
     auditRecords: [] as AuditRecord[],
   };
 }
@@ -298,10 +321,79 @@ function seedDemoLeads(): void {
   );
 }
 
+
+/** Payment tranches for the demo dataset (round G): a simple, believable
+ *  schedule per project so the cashflow view has something honest to show.
+ *  Past dates settle as paid, near ones as invoiced, future ones as expected. */
+function seedDemoTranches(): void {
+  const today = todayStr();
+  const shift = (date: string, days: number) =>
+    new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+  for (const project of db.projects) {
+    if (['cancelled'].includes(project.status)) continue;
+    const fee = project.contractValueMinor ?? 0;
+    if (fee <= 0) continue;
+    const splits: { label: string; frac: number; frac_at: number }[] = [
+      { label: 'On signing', frac: 0.3, frac_at: 0 },
+      { label: 'At the midpoint', frac: 0.4, frac_at: 0.5 },
+      { label: 'On completion', frac: 0.3, frac_at: 1 },
+    ];
+    let allocated = 0;
+    splits.forEach((split, i) => {
+      const amount = i === splits.length - 1
+        ? fee - allocated
+        : Math.round(fee * split.frac);
+      allocated += amount;
+      const start = Date.parse(`${project.startDate}T00:00:00Z`);
+      const end = Date.parse(`${project.targetEndDate}T00:00:00Z`);
+      const expectedDate = new Date(start + (end - start) * split.frac_at)
+        .toISOString().slice(0, 10);
+      // Invoices go out on the milestone; money tends to follow ~30 days later.
+      const paidDate = shift(expectedDate, 32);
+      const isPaid = paidDate < today;
+      const isInvoiced = !isPaid && expectedDate <= today;
+      const isLate = !isPaid && !isInvoiced ? false : false;
+      db.paymentTranches.push({
+        id: `tr-${project.id}-${i + 1}`,
+        projectId: project.id,
+        label: split.label,
+        amountMinor: amount,
+        expectedDate,
+        ...(isPaid ? { actualDate: paidDate, actualAmountMinor: amount } : {}),
+        status: isPaid ? 'paid' : isInvoiced ? 'invoiced' : 'expected',
+        updatedAt: `${today}T02:00:00Z`,
+        updatedBy: 'system',
+      });
+      void isLate;
+    });
+  }
+
+  // Leads carry an expected schedule too, so a prospect's cashflow is visible
+  // before it is won (client direction, round G).
+  for (const lead of db.leads) {
+    if (!lead.estFeeMinor || lead.stage === 'parked' || lead.stage === 'converted') continue;
+    const start = shift(lead.nextStepDate ?? today, 30);
+    [['On signing', 0.5, 0], ['On completion', 0.5, 120]].forEach(([label, frac, offset], i) => {
+      db.paymentTranches.push({
+        id: `tr-${lead.id}-${i + 1}`,
+        leadId: lead.id,
+        label: label as string,
+        amountMinor: Math.round(lead.estFeeMinor! * (frac as number)),
+        expectedDate: shift(start, offset as number),
+        status: 'expected',
+        updatedAt: `${today}T02:00:00Z`,
+        updatedBy: 'system',
+      });
+    });
+  }
+}
+
 // Seed the trail with the dataset's notable events (demo mode only).
 if (!isFreshMode()) {
   seedRecentDemoEntries();
   seedDemoLeads();
+  seedDemoTranches();
   audit({ actorUserId: 'usr-daniel', entityType: 'EmploymentAgreement', entityId: 'ea-mei-2', action: 'create', reason: 'Annual review adjustment', occurredAt: '2025-12-15T03:00:00Z' });
   audit({ actorUserId: 'usr-ryan', entityType: 'EmploymentAgreement', entityId: 'ea-mei-2', action: 'approve', reason: 'Second super admin confirmation', occurredAt: '2025-12-15T05:00:00Z' });
   audit({ actorUserId: 'usr-ryan', entityType: 'Variation', entityId: 'var-f-1', action: 'approve', occurredAt: '2026-04-14T06:00:00Z' });

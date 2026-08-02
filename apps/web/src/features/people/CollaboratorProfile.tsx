@@ -1,7 +1,9 @@
 // OE Verse collaborator profile (client direction, item 10): one page, no
 // tabs, every field the studio tracks. Rates stay S4: present only when the
 // serialiser says so, masked otherwise. The editor is shared with the
-// directory's "Add to the Verse" flow.
+// directory's "Add to the Verse" flow. Round F: location comes from country
+// and city presets, categories and engagements are chip multi-selects fed by
+// the admin-extendable option lists, and every save stamps the profile dates.
 
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
@@ -9,20 +11,70 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CurrencyCode } from '@oe/finance';
 import { useAccount } from '../../stores/session';
 import {
-  searchVerse, saveVerseProfile, VERSE_CATEGORIES, VERSE_CAPABILITIES,
+  searchVerse, saveVerseProfile,
   type VerseEntry, type VerseProfileInput,
 } from '../../api/verseApi';
-import type { VerseProfile } from '../../api/db';
+import { addOption, optionList, type OptionListKey } from '../../api/settings';
 import { Banner, Button, Card, Masked, PageHeader, StatusChip } from '../../components/ui';
-import { fmtMoneyWhole } from '../../lib/format';
+import { fmtDate, fmtMoneyWhole } from '../../lib/format';
 
 export const VERSE_EDITOR_ROLES = ['super_admin', 'ops_admin', 'finance_admin', 'leadership'];
 
-const ENGAGEMENTS: NonNullable<VerseProfile['engagement']>[] = [
-  'Full-time', 'Freelance', 'Short Stint', 'Internship',
+const field = 'w-full border border-line rounded-financial bg-raised px-3 py-2 text-base';
+
+// ---------------------------------------------------------------------------
+// Location presets (round F): country and city pickers for the region the
+// studio works in, with "Other" as the free-text door for anywhere else.
+// Stored as the existing "City, Country" string so old data still renders.
+// ---------------------------------------------------------------------------
+
+const OTHER = 'Other';
+
+const LOCATION_PRESETS: { country: string; code: string; cities: string[] }[] = [
+  { country: 'Singapore', code: 'SG', cities: ['Singapore'] },
+  { country: 'Malaysia', code: 'MY', cities: ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Ipoh', 'Kota Kinabalu'] },
+  { country: 'Indonesia', code: 'ID', cities: ['Jakarta', 'Bandung', 'Surabaya', 'Yogyakarta', 'Denpasar'] },
+  { country: 'Thailand', code: 'TH', cities: ['Bangkok', 'Chiang Mai', 'Phuket'] },
+  { country: 'Vietnam', code: 'VN', cities: ['Ho Chi Minh City', 'Hanoi', 'Da Nang'] },
+  { country: 'Philippines', code: 'PH', cities: ['Manila', 'Cebu', 'Davao'] },
+  { country: 'Japan', code: 'JP', cities: ['Tokyo', 'Osaka', 'Kyoto', 'Fukuoka'] },
+  { country: 'South Korea', code: 'KR', cities: ['Seoul', 'Busan', 'Incheon'] },
+  { country: 'China', code: 'CN', cities: ['Shanghai', 'Beijing', 'Shenzhen', 'Guangzhou', 'Chengdu'] },
+  { country: 'Hong Kong', code: 'HK', cities: ['Hong Kong'] },
+  { country: 'Taiwan', code: 'TW', cities: ['Taipei', 'Taichung', 'Kaohsiung'] },
+  { country: 'India', code: 'IN', cities: ['Mumbai', 'Delhi', 'Bengaluru', 'Chennai', 'Hyderabad'] },
+  { country: 'Australia', code: 'AU', cities: ['Sydney', 'Melbourne', 'Brisbane', 'Perth'] },
+  { country: 'UK', code: 'GB', cities: ['London', 'Manchester', 'Edinburgh', 'Bristol'] },
+  { country: 'USA', code: 'US', cities: ['New York', 'Los Angeles', 'San Francisco', 'Chicago', 'Seattle'] },
 ];
 
-const field = 'w-full border border-line rounded-financial bg-raised px-3 py-2 text-base';
+/** Read an existing "City, Country" string back into the pickers. Anything
+ *  the presets do not recognise lands in the "Other" free-text fallback. */
+function parseLocation(loc: string): { country: string; cityChoice: string; cityText: string; other: string } {
+  const s = loc.trim();
+  if (!s) return { country: '', cityChoice: '', cityText: '', other: '' };
+  const i = s.lastIndexOf(',');
+  if (i >= 0) {
+    const city = s.slice(0, i).trim();
+    const country = s.slice(i + 1).trim();
+    const preset = LOCATION_PRESETS.find((p) => p.country.toLowerCase() === country.toLowerCase());
+    if (preset) {
+      const known = preset.cities.find((c) => c.toLowerCase() === city.toLowerCase());
+      return known
+        ? { country: preset.country, cityChoice: known, cityText: '', other: '' }
+        : { country: preset.country, cityChoice: OTHER, cityText: city, other: '' };
+    }
+    return { country: OTHER, cityChoice: '', cityText: '', other: s };
+  }
+  const byCountry = LOCATION_PRESETS.find((p) => p.country.toLowerCase() === s.toLowerCase());
+  if (byCountry) return { country: byCountry.country, cityChoice: '', cityText: '', other: '' };
+  const byCity = LOCATION_PRESETS.find((p) => p.cities.some((c) => c.toLowerCase() === s.toLowerCase()));
+  if (byCity) {
+    const known = byCity.cities.find((c) => c.toLowerCase() === s.toLowerCase())!;
+    return { country: byCity.country, cityChoice: known, cityText: '', other: '' };
+  }
+  return { country: OTHER, cityChoice: '', cityText: '', other: s };
+}
 
 /** Star display: filled and empty glyphs, never colour alone. */
 export function Stars(props: { label: string; value?: number }) {
@@ -63,46 +115,128 @@ function StarInput(props: { label: string; value?: number; onChange: (n?: number
   );
 }
 
+/** Chip multi-select fed by an admin-extendable option list, with an inline
+ *  "add new option" input so the list grows from here too (round F). */
+function ChipMultiSelect(props: {
+  label: string;
+  listKey: OptionListKey;
+  values: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [options, setOptions] = useState<string[]>(() => optionList(props.listKey));
+  const [draft, setDraft] = useState('');
+  const all = [...options, ...props.values.filter((v) => !options.includes(v))];
+
+  const toggle = (v: string) =>
+    props.onChange(props.values.includes(v) ? props.values.filter((x) => x !== v) : [...props.values, v]);
+
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    addOption(props.listKey, v);
+    setOptions(optionList(props.listKey));
+    if (!props.values.includes(v)) props.onChange([...props.values, v]);
+    setDraft('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <span className="block text-sm text-ink-muted">{props.label}</span>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={props.label}>
+        {all.map((v) => {
+          const on = props.values.includes(v);
+          return (
+            <button
+              key={v}
+              type="button"
+              onClick={() => toggle(v)}
+              aria-pressed={on}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors duration-settle ${
+                on ? 'border-accent bg-accent text-white' : 'border-line bg-raised text-ink-muted hover:text-ink'
+              }`}
+            >
+              {v}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-2 max-w-xs">
+        <input
+          className="flex-1 border border-line rounded-financial bg-raised px-2.5 py-1 text-sm"
+          placeholder={`Add a new ${props.label.toLowerCase()} option`}
+          aria-label={`Add a new ${props.label.toLowerCase()} option`}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+        />
+        <Button variant="secondary" size="sm" disabled={!draft.trim()} onClick={add}>Add</Button>
+      </div>
+    </div>
+  );
+}
+
 /** The full-field editor, shared by the profile page and the directory's
  *  "Add to the Verse" flow (no initial entry means a new profile). */
 export function VerseProfileEditor(props: {
   initial?: VerseEntry;
   onDone: (collaboratorId?: string) => void;
+  /** Directory flow: return to the list without a route change. */
+  onBackToDirectory?: () => void;
 }) {
   const account = useAccount();
   const qc = useQueryClient();
   const c = props.initial?.collaborator;
   const p = props.initial?.profile;
+  const parsedLoc = parseLocation(c?.location ?? '');
 
   const [fullName, setFullName] = useState(c?.name ?? '');
   const [website, setWebsite] = useState(p?.website ?? '');
   const [instagram, setInstagram] = useState(p?.instagram ?? '');
   const [email, setEmail] = useState(p?.email ?? '');
   const [contactNo, setContactNo] = useState(p?.contactNo ?? '');
-  const [location, setLocation] = useState(c?.location ?? '');
-  const [category, setCategory] = useState(p?.category ?? '');
+  const [country, setCountry] = useState(parsedLoc.country);
+  const [cityChoice, setCityChoice] = useState(parsedLoc.cityChoice);
+  const [cityText, setCityText] = useState(parsedLoc.cityText);
+  const [locationOther, setLocationOther] = useState(parsedLoc.other);
+  const [categories, setCategories] = useState<string[]>(p?.categories ?? []);
   const [capabilities, setCapabilities] = useState<string[]>(p?.capabilities ?? []);
-  const [engagement, setEngagement] = useState<VerseProfile['engagement']>(p?.engagement);
+  const [engagements, setEngagements] = useState<string[]>(p?.engagements ?? []);
   const [engagedBefore, setEngagedBefore] = useState(p?.engagedBefore ?? false);
   const [craft, setCraft] = useState<number | undefined>(p?.craftRating);
   const [personality, setPersonality] = useState<number | undefined>(p?.personalityRating);
   const [notes, setNotes] = useState(p?.notes ?? '');
   const [ratesNote, setRatesNote] = useState(p?.ratesNote ?? '');
+  const [savedId, setSavedId] = useState<string | undefined>();
+
+  const capabilityOptions = (() => {
+    const base = optionList('verse_capabilities');
+    return [...base, ...capabilities.filter((v) => !base.includes(v))];
+  })();
+
+  const preset = LOCATION_PRESETS.find((x) => x.country === country);
+  const effectiveCity = cityChoice === OTHER ? cityText.trim() : cityChoice;
+  const composedLocation =
+    country === OTHER
+      ? locationOther.trim()
+      : country
+        ? (effectiveCity && effectiveCity !== country ? `${effectiveCity}, ${country}` : country)
+        : '';
 
   const save = useMutation({
     mutationFn: () => {
       const input: VerseProfileInput = {
-        collaboratorId: c?.id,
+        collaboratorId: c?.id ?? savedId,
         fullName: fullName.trim(),
-        discipline: c?.discipline ?? (category || undefined),
-        location: location.trim() || undefined,
+        discipline: c?.discipline ?? (categories[0] || undefined),
+        location: composedLocation || undefined,
+        country: preset?.code,
         website: website.trim() || undefined,
         instagram: instagram.trim() || undefined,
         email: email.trim() || undefined,
         contactNo: contactNo.trim() || undefined,
-        category: category || undefined,
+        categories,
         capabilities,
-        engagement,
+        engagements,
         notes: notes.trim() || undefined,
         ratesNote: ratesNote.trim() || undefined,
         engagedBefore,
@@ -113,12 +247,23 @@ export function VerseProfileEditor(props: {
     },
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['verse-search'] });
-      props.onDone(res.collaborator.id);
+      setSavedId(res.collaborator.id);
     },
   });
 
   const toggleCapability = (cap: string) =>
     setCapabilities((cur) => (cur.includes(cap) ? cur.filter((x) => x !== cap) : [...cur, cap]));
+
+  const resetForAnother = () => {
+    setFullName(''); setWebsite(''); setInstagram(''); setEmail(''); setContactNo('');
+    setCountry(''); setCityChoice(''); setCityText(''); setLocationOther('');
+    setCategories([]); setCapabilities([]); setEngagements([]);
+    setEngagedBefore(false); setCraft(undefined); setPersonality(undefined);
+    setNotes(''); setRatesNote(''); setSavedId(undefined);
+    save.reset();
+  };
+
+  const creating = !c;
 
   return (
     <div className="space-y-4">
@@ -145,38 +290,71 @@ export function VerseProfileEditor(props: {
             <input className={field} value={contactNo} onChange={(e) => setContactNo(e.target.value)} />
           </label>
           <label className="block">
-            <span className="block text-sm text-ink-muted mb-0.5">Location</span>
-            <input className={field} value={location} onChange={(e) => setLocation(e.target.value)} />
-          </label>
-          <label className="block">
-            <span className="block text-sm text-ink-muted mb-0.5">Category</span>
-            <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">Choose…</option>
-              {VERSE_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="block text-sm text-ink-muted mb-0.5">Engagement</span>
+            <span className="block text-sm text-ink-muted mb-0.5">Country</span>
             <select
               className={field}
-              value={engagement ?? ''}
-              onChange={(e) => setEngagement((e.target.value || undefined) as VerseProfile['engagement'])}
+              value={country}
+              onChange={(e) => { setCountry(e.target.value); setCityChoice(''); setCityText(''); }}
             >
               <option value="">Choose…</option>
-              {ENGAGEMENTS.map((en) => (
-                <option key={en} value={en}>{en}</option>
+              {LOCATION_PRESETS.map((x) => (
+                <option key={x.country} value={x.country}>{x.country}</option>
               ))}
+              <option value={OTHER}>{OTHER}</option>
             </select>
           </label>
+          {country === OTHER ? (
+            <label className="block">
+              <span className="block text-sm text-ink-muted mb-0.5">Location</span>
+              <input
+                className={field}
+                placeholder="City, Country"
+                value={locationOther}
+                onChange={(e) => setLocationOther(e.target.value)}
+              />
+            </label>
+          ) : (
+            <label className="block">
+              <span className="block text-sm text-ink-muted mb-0.5">City</span>
+              <select
+                className={field}
+                value={cityChoice}
+                disabled={!preset}
+                onChange={(e) => { setCityChoice(e.target.value); if (e.target.value !== OTHER) setCityText(''); }}
+              >
+                <option value="">Choose…</option>
+                {(preset?.cities ?? []).map((ct) => (
+                  <option key={ct} value={ct}>{ct}</option>
+                ))}
+                <option value={OTHER}>{OTHER}</option>
+              </select>
+              {cityChoice === OTHER && (
+                <input
+                  className={`${field} mt-1.5`}
+                  placeholder="City"
+                  aria-label="Other city"
+                  value={cityText}
+                  onChange={(e) => setCityText(e.target.value)}
+                />
+              )}
+            </label>
+          )}
         </div>
+      </Card>
+
+      <Card>
+        <ChipMultiSelect
+          label="Categories"
+          listKey="verse_categories"
+          values={categories}
+          onChange={setCategories}
+        />
       </Card>
 
       <Card className="space-y-2">
         <span className="block text-sm text-ink-muted">Capabilities</span>
         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1.5">
-          {VERSE_CAPABILITIES.map((cap) => (
+          {capabilityOptions.map((cap) => (
             <label key={cap} className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
@@ -187,6 +365,15 @@ export function VerseProfileEditor(props: {
             </label>
           ))}
         </div>
+      </Card>
+
+      <Card>
+        <ChipMultiSelect
+          label="Engagement"
+          listKey="verse_engagements"
+          values={engagements}
+          onChange={setEngagements}
+        />
       </Card>
 
       <Card className="space-y-3">
@@ -218,11 +405,35 @@ export function VerseProfileEditor(props: {
       {save.isError && (
         <Banner tone="critical">That didn't save. The fault is ours. Try again in a moment.</Banner>
       )}
+      {savedId && !save.isError && (
+        <Banner tone="positive">
+          <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span>Saved.</span>
+            {props.onBackToDirectory ? (
+              <button type="button" className="underline hover:no-underline" onClick={props.onBackToDirectory}>
+                Back to the OE Verse directory
+              </button>
+            ) : (
+              <Link to="/verse" className="underline hover:no-underline">Back to the OE Verse directory</Link>
+            )}
+            {creating && (
+              <Link to={`/verse/${savedId}`} className="underline hover:no-underline">View profile</Link>
+            )}
+            {creating && (
+              <button type="button" className="underline hover:no-underline" onClick={resetForAnother}>
+                Add another collaborator
+              </button>
+            )}
+          </span>
+        </Banner>
+      )}
       <div className="flex gap-2">
         <Button variant="primary" disabled={!fullName.trim() || save.isPending} onClick={() => save.mutate()}>
-          {c ? 'Save profile' : 'Add to the Verse'}
+          {c || savedId ? 'Save profile' : 'Add to the Verse'}
         </Button>
-        <Button variant="quiet" onClick={() => props.onDone()}>Cancel</Button>
+        <Button variant="quiet" onClick={() => props.onDone(savedId)}>
+          {savedId ? 'Close' : 'Cancel'}
+        </Button>
       </div>
     </div>
   );
@@ -255,13 +466,17 @@ export default function CollaboratorProfile() {
 
   const c = entry.collaborator;
   const p = entry.profile;
+  const dates = [
+    p.addedAt && `Added ${fmtDate(p.addedAt)}`,
+    p.updatedAt && `Updated ${fmtDate(p.updatedAt)}`,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div className="max-w-2xl space-y-4">
       <PageHeader
         crumbs={[{ label: 'OE Verse' }, { label: c.name }]}
         title={c.name}
-        lede={[p.category ?? c.discipline, c.location].filter(Boolean).join(' · ')}
+        lede={[p.categories[0] ?? c.discipline, c.location].filter(Boolean).join(' · ')}
         actions={
           canEdit && !editing ? (
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>Edit</Button>
@@ -288,7 +503,15 @@ export default function CollaboratorProfile() {
             </Row>
             <Row label="Contact no">{p.contactNo ? <span className="tabular">{p.contactNo}</span> : '—'}</Row>
             <Row label="Location">{c.location}</Row>
-            <Row label="Category">{p.category ?? '—'}</Row>
+            <Row label="Categories">
+              {p.categories.length > 0 ? (
+                <span className="flex flex-wrap gap-1">
+                  {p.categories.map((cat) => (
+                    <span key={cat} className="text-xs border border-line rounded-full px-2 py-0.5 text-ink-muted">{cat}</span>
+                  ))}
+                </span>
+              ) : '—'}
+            </Row>
             <Row label="Capabilities">
               {(p.capabilities ?? []).length > 0 ? (
                 <span className="flex flex-wrap gap-1">
@@ -299,7 +522,13 @@ export default function CollaboratorProfile() {
               ) : '—'}
             </Row>
             <Row label="Engagement">
-              {p.engagement ? <StatusChip tone="info">{p.engagement}</StatusChip> : '—'}
+              {p.engagements.length > 0 ? (
+                <span className="flex flex-wrap gap-1">
+                  {p.engagements.map((en) => (
+                    <StatusChip key={en} tone="info">{en}</StatusChip>
+                  ))}
+                </span>
+              ) : '—'}
             </Row>
             <Row label="Engaged before">
               {p.engagedBefore ? <StatusChip tone="positive">Yes</StatusChip> : <StatusChip tone="neutral">No</StatusChip>}
@@ -307,6 +536,7 @@ export default function CollaboratorProfile() {
             <Row label="Craft"><Stars label="Craft" value={p.craftRating} /></Row>
             <Row label="Personality"><Stars label="Personality" value={p.personalityRating} /></Row>
             <Row label="Notes">{p.notes ?? '—'}</Row>
+            {dates && <p className="text-xs text-ink-faint pt-2">{dates}</p>}
           </Card>
 
           <Card as="section">

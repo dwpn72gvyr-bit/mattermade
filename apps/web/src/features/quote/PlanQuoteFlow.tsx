@@ -5,20 +5,25 @@
 // compute it on the server. Approval freezes the chosen model as the project's
 // baseline and hands the structure to staffing.
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  priceLadder, applyDiscount, buildScenario, toMinor,
+  priceLadder, applyDiscount, buildScenario, toMinor, roundHalfUp,
   type PricingInputs, type Scenario,
 } from '@oe/finance';
 import { RATE_CARD, AVAILABLE_RATE_CARD } from '@oe/fixtures';
 import { useAccount } from '../../stores/session';
 import { getQuotations, getTemplates } from '../../api/queries';
 import { convertQuoteToProject } from '../../api/projectOps';
-import { todayStr } from '../../api/settings';
+import {
+  optionList, teamRateDefaults, setTeamRateDefault, todayStr,
+  type TeamRateRoleKey,
+} from '../../api/settings';
 import { Banner, Button, Card, PageHeader, Stat, LedgerTable, Td, Th } from '../../components/ui';
 import { fmtDate, fmtMoneyWhole, fmtPct } from '../../lib/format';
+
+const GST_RATE = 0.09;
 
 // The same six roles as the effort grid has always carried.
 const ROLES: { key: string; label: string }[] = [
@@ -33,6 +38,93 @@ const ROLES: { key: string; label: string }[] = [
 // Overhead recovery basis (§6.6): monthly overhead 12,000 over the team's
 // monthly productive hours (5 × 1,452.8 + 1,120 = 8,384 a year).
 const OVERHEAD_PER_PRODUCTIVE_HOUR_MINOR = Math.round(12_000_00 / (8384 / 12));
+
+// The internal team rates table (round F): six roles with admin-set default
+// cost and sell rates, per-project overrides and hours for this project.
+const TEAM_ROLES: { key: TeamRateRoleKey; label: string }[] = [
+  { key: 'founder', label: 'Founder' },
+  { key: 'cd', label: 'Creative Director' },
+  { key: 'ad', label: 'Art Director' },
+  { key: 'am', label: 'Account Manager' },
+  { key: 'designer', label: 'Designer' },
+  { key: 'acp', label: 'Assistant Creative Producer' },
+];
+
+interface TeamRateRow {
+  costOverride: string; // dollars as typed; empty = use the admin default
+  sellOverride: string;
+  hours: number;
+}
+
+const emptyTeamRows = (): Record<TeamRateRoleKey, TeamRateRow> =>
+  Object.fromEntries(
+    TEAM_ROLES.map((r) => [r.key, { costOverride: '', sellOverride: '', hours: 0 }]),
+  ) as Record<TeamRateRoleKey, TeamRateRow>;
+
+// ---------------------------------------------------------------------------
+// Scope of work (round F): a long-form description with a simple renderer for
+// **bold**, "- " bullet lines and blank-line paragraphs, plus commercial line
+// items totalled to nett, GST and gross.
+// ---------------------------------------------------------------------------
+
+interface ScopeItem {
+  id: string;
+  description: string;
+  qty: number;
+  unitPriceSGD: number;
+}
+
+/** Line total in minor units: quantity × unit price, rounded once. */
+function scopeLineMinor(item: ScopeItem): number {
+  return roundHalfUp(toMinor(item.unitPriceSGD || 0) * Math.max(0, item.qty || 0));
+}
+
+/** Render **bold** spans within a run of text. No library, no nesting. */
+function renderBold(text: string): React.ReactNode {
+  const parts = text.split(/\*\*([^*]+)\*\*/g);
+  if (parts.length === 1) return text;
+  return parts.map((p, i) =>
+    i % 2 === 1 ? <strong key={i}>{p}</strong> : <React.Fragment key={i}>{p}</React.Fragment>,
+  );
+}
+
+/** Simple formatter: blank lines separate paragraphs, lines starting with
+ *  "- " become bullets, **bold** is honoured. Nothing else. */
+function ScopeRendered(props: { text: string }) {
+  const out: React.ReactNode[] = [];
+  const blocks = props.text.split(/\n[ \t]*\n+/);
+  blocks.forEach((block, bi) => {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    let bullets: string[] = [];
+    let plain: string[] = [];
+    const flushPlain = () => {
+      if (plain.length) {
+        out.push(<p key={`p-${bi}-${out.length}`}>{renderBold(plain.join(' '))}</p>);
+        plain = [];
+      }
+    };
+    const flushBullets = () => {
+      if (bullets.length) {
+        out.push(
+          <ul key={`u-${bi}-${out.length}`} className="list-disc pl-5 space-y-0.5">
+            {bullets.map((b, j) => <li key={j}>{renderBold(b)}</li>)}
+          </ul>,
+        );
+        bullets = [];
+      }
+    };
+    for (const line of lines) {
+      if (line.startsWith('- ')) { flushPlain(); bullets.push(line.slice(2)); }
+      else { flushBullets(); plain.push(line); }
+    }
+    flushPlain();
+    flushBullets();
+  });
+  if (out.length === 0) {
+    return <p className="text-sm text-ink-faint">No scope written yet.</p>;
+  }
+  return <div className="space-y-2 text-base max-w-3xl">{out}</div>;
+}
 
 // ---------------------------------------------------------------------------
 // Structure: a PHASE is a named stage of the project; the SCOPE OF WORK is the
@@ -225,6 +317,43 @@ export default function PlanQuoteFlow() {
   const templates = useQuery({ queryKey: ['templates', account.userId], queryFn: () => getTemplates(account) });
   const record = quotes.data?.find((q) => q.quotation.id === quoteId);
 
+  // The super admin edits everything on this page; other allowed roles keep
+  // their existing access (round F).
+  const isSuper = account.roles.includes('super_admin');
+
+  // Project details (round F, part 1): editable particulars at the top.
+  const [details, setDetails] = useState({
+    name: '', client: '', serviceLine: '', startDate: '', endDate: '', currency: 'SGD',
+  });
+  const [detailsSeeded, setDetailsSeeded] = useState(false);
+  useEffect(() => {
+    if (detailsSeeded || !record) return;
+    setDetails({
+      name: record.project?.name ?? '',
+      client: record.clientName ?? '',
+      serviceLine: record.project?.serviceLine ?? '',
+      startDate: record.project?.startDate ?? todayStr(),
+      endDate: record.project?.targetEndDate ?? '',
+      currency: record.quotation.currency ?? 'SGD',
+    });
+    setDetailsSeeded(true);
+  }, [record, detailsSeeded]);
+  const serviceLines = useMemo(() => {
+    const list = optionList('service_lines');
+    return details.serviceLine && !list.includes(details.serviceLine)
+      ? [details.serviceLine, ...list]
+      : list;
+  }, [details.serviceLine]);
+
+  // Scope of work (round F, part 2): long-form text plus commercial line items.
+  const [scopeText, setScopeText] = useState('');
+  const [scopeItems, setScopeItems] = useState<ScopeItem[]>([]);
+
+  // Internal team rates (round F, part 3): admin defaults, per-project
+  // overrides and hours. Presentation-only figures in integer minor units.
+  const [rateDefaults, setRateDefaults] = useState(() => teamRateDefaults());
+  const [teamRows, setTeamRows] = useState<Record<TeamRateRoleKey, TeamRateRow>>(emptyTeamRows);
+
   // Structure and scope of work
   const [phases, setPhases] = useState<PhaseRow[]>(() => makePhases(INITIAL_PHASES));
   const [openPhaseIds, setOpenPhaseIds] = useState<Set<string>>(new Set());
@@ -339,12 +468,12 @@ export default function PlanQuoteFlow() {
 
   const convert = useMutation({
     mutationFn: () => {
-      const start = todayStr();
+      const start = details.startDate || todayStr();
       return convertQuoteToProject(account, {
         quotationId: quoteId,
-        name: record?.project?.name ?? 'New engagement',
-        clientName: record?.clientName ?? 'Client',
-        serviceLine: record?.project?.serviceLine ?? 'creative_direction',
+        name: details.name || record?.project?.name || 'New engagement',
+        clientName: details.client || record?.clientName || 'Client',
+        serviceLine: details.serviceLine || record?.project?.serviceLine || 'creative_direction',
         feeMinor: chosen.scenario.quote.quotedPriceMinor,
         startDate: start,
         targetEndDate: addMonths(start, chosen.scenario.durationMonths),
@@ -425,6 +554,77 @@ export default function PlanQuoteFlow() {
   const removeExternal = (id: string) => {
     setExternals((prev) => prev.filter((r) => r.id !== id));
   };
+
+  // ---- scope of work line items (round F) --------------------------------
+
+  const updateScopeItem = (id: string, patch: Partial<ScopeItem>) => {
+    setScopeItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  };
+
+  const addScopeItem = () => {
+    setScopeItems((prev) => [
+      ...prev,
+      { id: nextId('sow'), description: '', qty: 1, unitPriceSGD: 0 },
+    ]);
+  };
+
+  const removeScopeItem = (id: string) => {
+    setScopeItems((prev) => prev.filter((it) => it.id !== id));
+  };
+
+  const scopeSubtotalMinor = useMemo(
+    () => scopeItems.reduce((s, it) => s + scopeLineMinor(it), 0),
+    [scopeItems],
+  );
+  const scopeGstMinor = roundHalfUp(scopeSubtotalMinor * GST_RATE);
+  const scopeGrossMinor = scopeSubtotalMinor + scopeGstMinor;
+
+  // ---- internal team rates (round F) -------------------------------------
+
+  const updateTeamRow = (key: TeamRateRoleKey, patch: Partial<TeamRateRow>) => {
+    setTeamRows((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  };
+
+  const updateRateDefault = (key: TeamRateRoleKey, field: 'costMinor' | 'sellMinor', dollars: number) => {
+    setTeamRateDefault(key, { [field]: toMinor(Math.max(0, dollars)) });
+    setRateDefaults(teamRateDefaults());
+  };
+
+  const teamLines = useMemo(() =>
+    TEAM_ROLES.map((r) => {
+      const row = teamRows[r.key];
+      const def = rateDefaults[r.key];
+      const costRateMinor = row.costOverride.trim() === ''
+        ? def.costMinor
+        : toMinor(Math.max(0, Number(row.costOverride) || 0));
+      const sellRateMinor = row.sellOverride.trim() === ''
+        ? def.sellMinor
+        : toMinor(Math.max(0, Number(row.sellOverride) || 0));
+      const hours = Math.max(0, row.hours || 0);
+      return {
+        key: r.key, label: r.label, row, def, costRateMinor, sellRateMinor, hours,
+        costMinor: roundHalfUp(hours * costRateMinor),
+        priceMinor: roundHalfUp(hours * sellRateMinor),
+      };
+    }),
+  [teamRows, rateDefaults]);
+  const teamCostTotalMinor = teamLines.reduce((s, l) => s + l.costMinor, 0);
+  const teamPriceTotalMinor = teamLines.reduce((s, l) => s + l.priceMinor, 0);
+
+  // ---- profit summary (round F, part 5) ----------------------------------
+  // Fee is the modelled fee: the recommended price with the current discount
+  // applied, exactly as the ladder computes it. Costs are the ladder's own
+  // figures; the arithmetic here is presentation-only in integer minor units.
+  const summaryMonths = Math.max(1, durationMonths);
+  const summaryFeeMinor = discounted.quotedPriceMinor;
+  const profitAfterExternalMinor = summaryFeeMinor - ladder.externalCostMinor;
+  const trueProfitMinor = summaryFeeMinor
+    - ladder.internalCostMinor
+    - ladder.externalCostMinor
+    - ladder.contingencyMinor
+    - ladder.overheadRecoveryMinor;
+  const summaryMargin = (profitMinor: number) =>
+    summaryFeeMinor === 0 ? 0 : profitMinor / summaryFeeMinor;
 
   const toggleLadderRow = (i: number) => {
     setOpenLadderRows((prev) => {
@@ -623,8 +823,8 @@ export default function PlanQuoteFlow() {
   return (
     <div>
       <PageHeader
-        crumbs={[{ label: 'Plan & Quote' }, { label: record?.project?.name ?? 'Estimate' }]}
-        title={record?.project?.name ?? 'Estimate'}
+        crumbs={[{ label: 'Plan & Quote' }, { label: details.name || record?.project?.name || 'Estimate' }]}
+        title={details.name || record?.project?.name || 'Estimate'}
         lede="One language from promise to proof: everything on this page responds to everything else, so the shape of the work and the shape of the price are always in view together."
       />
 
@@ -653,33 +853,238 @@ export default function PlanQuoteFlow() {
       )}
 
       <div className="space-y-5">
-        {/* ---------------------------------------------------- Particulars */}
+        {/* ------------------------------------------------ Project details */}
         <Card as="section">
-          <h2 className="display text-lg mb-3">Particulars</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Stat label="Client" value={record?.clientName ?? 'To be confirmed'} />
-            <Stat label="Service line" value={record?.project?.serviceLine.replace(/_/g, ' ') ?? 'To be confirmed'} />
-            <Stat label="Window" value={record?.project ? `${fmtDate(record.project.startDate)} to ${fmtDate(record.project.targetEndDate)}` : 'To be confirmed'} />
-            <Stat
-              label="Duration"
-              value={
-                <span className="flex items-center gap-2">
-                  <input
-                    type="number" min={1} max={24}
-                    className={`w-16 ${inputCls} tabular`}
-                    value={durationMonths}
-                    onChange={(e) => setDurationMonths(Math.max(1, Number(e.target.value) || 1))}
-                    aria-label="Duration in months"
-                  />
-                  months
-                </span>
-              }
-            />
+          <h2 className="display text-lg mb-3">Project details</h2>
+          {isSuper ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <label className="block">
+                <span className="block text-sm text-ink-muted mb-0.5">Project name</span>
+                <input
+                  className={`w-full ${inputCls}`}
+                  value={details.name}
+                  placeholder="Project name"
+                  aria-label="Project name"
+                  onChange={(e) => setDetails((d) => ({ ...d, name: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-sm text-ink-muted mb-0.5">Client</span>
+                <input
+                  className={`w-full ${inputCls}`}
+                  value={details.client}
+                  placeholder="Client"
+                  aria-label="Client"
+                  onChange={(e) => setDetails((d) => ({ ...d, client: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-sm text-ink-muted mb-0.5">Service line</span>
+                <select
+                  className={`w-full ${inputCls}`}
+                  value={details.serviceLine}
+                  aria-label="Service line"
+                  onChange={(e) => setDetails((d) => ({ ...d, serviceLine: e.target.value }))}
+                >
+                  <option value="">To be confirmed</option>
+                  {serviceLines.map((s) => (
+                    <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-sm text-ink-muted mb-0.5">Start date</span>
+                <input
+                  type="date"
+                  className={`w-full ${inputCls} tabular`}
+                  value={details.startDate}
+                  aria-label="Start date"
+                  onChange={(e) => setDetails((d) => ({ ...d, startDate: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-sm text-ink-muted mb-0.5">Target end date</span>
+                <input
+                  type="date"
+                  className={`w-full ${inputCls} tabular`}
+                  value={details.endDate}
+                  aria-label="Target end date"
+                  onChange={(e) => setDetails((d) => ({ ...d, endDate: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-sm text-ink-muted mb-0.5">Currency</span>
+                <input
+                  className={`w-24 ${inputCls}`}
+                  value={details.currency}
+                  aria-label="Currency"
+                  maxLength={3}
+                  onChange={(e) => setDetails((d) => ({ ...d, currency: e.target.value.toUpperCase() }))}
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Stat label="Client" value={details.client || record?.clientName || 'To be confirmed'} />
+              <Stat label="Service line" value={(details.serviceLine || record?.project?.serviceLine)?.replace(/_/g, ' ') ?? 'To be confirmed'} />
+              <Stat
+                label="Window"
+                value={details.startDate && details.endDate
+                  ? `${fmtDate(details.startDate)} to ${fmtDate(details.endDate)}`
+                  : 'To be confirmed'}
+              />
+              <Stat label="Currency" value={details.currency || 'SGD'} />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 mt-4">
+            <label className="flex items-center gap-2 text-sm text-ink-muted">
+              Duration
+              <input
+                type="number" min={1} max={24}
+                className={`w-16 ${inputCls} tabular`}
+                value={durationMonths}
+                onChange={(e) => setDurationMonths(Math.max(1, Number(e.target.value) || 1))}
+                aria-label="Duration in months"
+              />
+              months
+            </label>
           </div>
           <p className="text-sm text-ink-muted mt-3">
             Probability {Math.round((record?.project?.probability ?? 0.6) * 100)}%. A weighted
             view of this fee flows into the company pipeline the moment the estimate is saved.
           </p>
+        </Card>
+
+        {/* -------------------------------------------------- Scope of work */}
+        <Card as="section">
+          <h2 className="display text-lg mb-1">Scope of work</h2>
+          <p className="text-sm text-ink-muted mb-3 max-w-3xl">
+            The written scope the client reads, with the commercial line items beneath it.
+            Bold with **double asterisks**, bullets with "- ", paragraphs with a blank line.
+          </p>
+          {isSuper ? (
+            <div className="grid lg:grid-cols-2 gap-4 mb-4">
+              <label className="block">
+                <span className="block text-sm text-ink-muted mb-0.5">Write the scope</span>
+                <textarea
+                  className={`w-full min-h-[10rem] ${inputCls} font-mono text-sm`}
+                  value={scopeText}
+                  aria-label="Scope of work text"
+                  placeholder={'**Discovery and strategy**\n\n- Stakeholder interviews\n- Positioning workshop'}
+                  onChange={(e) => setScopeText(e.target.value)}
+                />
+              </label>
+              <div>
+                <span className="block text-sm text-ink-muted mb-0.5">As it reads</span>
+                <div className="border border-line rounded-financial bg-sunken/40 px-3 py-2 min-h-[10rem]">
+                  <ScopeRendered text={scopeText} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4">
+              <ScopeRendered text={scopeText} />
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-ink-muted">
+                <tr>
+                  <th className="text-left px-2 py-1.5 font-medium">Line item</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Quantity</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Unit price (SGD)</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Line total</th>
+                  {isSuper && <th className="px-2 py-1.5" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line/60">
+                {scopeItems.length === 0 && (
+                  <tr>
+                    <td className="px-2 py-2 text-ink-faint" colSpan={isSuper ? 5 : 4}>
+                      No line items yet.
+                    </td>
+                  </tr>
+                )}
+                {scopeItems.map((item) => (
+                  <tr key={item.id}>
+                    <td className="px-2 py-1.5">
+                      {isSuper ? (
+                        <input
+                          value={item.description}
+                          placeholder="Description"
+                          aria-label="Line item description"
+                          className={`w-full min-w-[12rem] ${inputCls}`}
+                          onChange={(e) => updateScopeItem(item.id, { description: e.target.value })}
+                        />
+                      ) : (
+                        item.description || 'Line item'
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {isSuper ? (
+                        <input
+                          type="number" min={0}
+                          value={item.qty}
+                          aria-label="Line item quantity"
+                          className={`w-16 ${inputCls} text-right tabular`}
+                          onChange={(e) => updateScopeItem(item.id, { qty: Math.max(0, Number(e.target.value) || 0) })}
+                        />
+                      ) : (
+                        <span className="tabular">{item.qty}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {isSuper ? (
+                        <input
+                          type="number" min={0}
+                          value={item.unitPriceSGD}
+                          aria-label="Line item unit price in SGD"
+                          className={`w-24 ${inputCls} text-right tabular`}
+                          onChange={(e) => updateScopeItem(item.id, { unitPriceSGD: Math.max(0, Number(e.target.value) || 0) })}
+                        />
+                      ) : (
+                        <span className="tabular">{fmtMoneyWhole(toMinor(item.unitPriceSGD || 0))}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular font-medium whitespace-nowrap">
+                      {fmtMoneyWhole(scopeLineMinor(item))}
+                    </td>
+                    {isSuper && (
+                      <td className="px-2 py-1.5 text-right">
+                        <Button size="sm" variant="quiet" onClick={() => removeScopeItem(item.id)}
+                          aria-label={`Remove ${item.description || 'line item'}`}>
+                          Remove
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t border-line">
+                <tr>
+                  <td className="px-2 py-1.5" colSpan={3}>Sub-total (nett)</td>
+                  <td className="px-2 py-1.5 text-right tabular font-medium">{fmtMoneyWhole(scopeSubtotalMinor)}</td>
+                  {isSuper && <td />}
+                </tr>
+                <tr>
+                  <td className="px-2 py-1.5" colSpan={3}>GST at {fmtPct(GST_RATE, 0)}</td>
+                  <td className="px-2 py-1.5 text-right tabular">{fmtMoneyWhole(scopeGstMinor)}</td>
+                  {isSuper && <td />}
+                </tr>
+                <tr className="font-medium">
+                  <td className="px-2 py-1.5" colSpan={3}>Gross total</td>
+                  <td className="px-2 py-1.5 text-right tabular">{fmtMoneyWhole(scopeGrossMinor)}</td>
+                  {isSuper && <td />}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {isSuper && (
+            <div className="mt-3">
+              <Button size="sm" variant="secondary" onClick={addScopeItem}>Add line item</Button>
+            </div>
+          )}
         </Card>
 
         {/* -------------------------------------------- Structure & Effort */}
@@ -783,12 +1188,131 @@ export default function PlanQuoteFlow() {
           </div>
         </Card>
 
-        {/* --------------------------------------------------- Externals */}
+        {/* --------------------------------------------- Internal team rates */}
         <Card as="section">
-          <h2 className="display text-lg mb-1">Externals</h2>
+          <h2 className="display text-lg mb-1">Internal team rates</h2>
           <p className="text-sm text-ink-muted mb-3 max-w-3xl">
-            Collaborators and suppliers, itemised at what OuterEdit pays. The mark-up below is a
-            pricing event applied only in the ladder, never a recorded cost.
+            The studio's default cost and sell rate per role, set by the admin and kept for
+            every estimate. A per-project override applies to this estimate only; leave it
+            empty to use the default. Cost and price here are a working view beside the
+            ladder, which remains the pricing authority.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-ink-muted">
+                <tr>
+                  <th className="text-left px-2 py-1.5 font-medium">Role</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Default cost /h</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Default sell /h</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Cost override /h</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Sell override /h</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Hours</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Cost</th>
+                  <th className="text-right px-2 py-1.5 font-medium">Price</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line/60">
+                {teamLines.map((l) => (
+                  <tr key={l.key}>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{l.label}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      {isSuper ? (
+                        <input
+                          type="number" min={0}
+                          value={l.def.costMinor / 100}
+                          aria-label={`${l.label} default cost rate in SGD per hour`}
+                          className={`w-20 ${inputCls} text-right tabular`}
+                          onChange={(e) => updateRateDefault(l.key, 'costMinor', Number(e.target.value) || 0)}
+                        />
+                      ) : (
+                        <span className="tabular">{fmtMoneyWhole(l.def.costMinor)}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {isSuper ? (
+                        <input
+                          type="number" min={0}
+                          value={l.def.sellMinor / 100}
+                          aria-label={`${l.label} default sell rate in SGD per hour`}
+                          className={`w-20 ${inputCls} text-right tabular`}
+                          onChange={(e) => updateRateDefault(l.key, 'sellMinor', Number(e.target.value) || 0)}
+                        />
+                      ) : (
+                        <span className="tabular">{fmtMoneyWhole(l.def.sellMinor)}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {isSuper ? (
+                        <input
+                          type="number" min={0}
+                          value={l.row.costOverride}
+                          placeholder="default"
+                          aria-label={`${l.label} cost rate override for this project`}
+                          className={`w-20 ${inputCls} text-right tabular`}
+                          onChange={(e) => updateTeamRow(l.key, { costOverride: e.target.value })}
+                        />
+                      ) : (
+                        <span className="tabular">{l.row.costOverride.trim() === '' ? '—' : fmtMoneyWhole(l.costRateMinor)}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {isSuper ? (
+                        <input
+                          type="number" min={0}
+                          value={l.row.sellOverride}
+                          placeholder="default"
+                          aria-label={`${l.label} sell rate override for this project`}
+                          className={`w-20 ${inputCls} text-right tabular`}
+                          onChange={(e) => updateTeamRow(l.key, { sellOverride: e.target.value })}
+                        />
+                      ) : (
+                        <span className="tabular">{l.row.sellOverride.trim() === '' ? '—' : fmtMoneyWhole(l.sellRateMinor)}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {isSuper ? (
+                        <input
+                          type="number" min={0}
+                          value={l.row.hours}
+                          aria-label={`${l.label} hours for this project`}
+                          className={`w-16 ${inputCls} text-right tabular`}
+                          onChange={(e) => updateTeamRow(l.key, { hours: Math.max(0, Number(e.target.value) || 0) })}
+                        />
+                      ) : (
+                        <span className="tabular">{l.hours}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular whitespace-nowrap">{fmtMoneyWhole(l.costMinor)}</td>
+                    <td className="px-2 py-1.5 text-right tabular whitespace-nowrap">{fmtMoneyWhole(l.priceMinor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t border-line font-medium">
+                <tr>
+                  <td className="px-2 py-1.5" colSpan={6}>
+                    Cost against price
+                    <span className="block text-xs text-ink-faint font-normal">
+                      Price less cost:{' '}
+                      <span className={`tabular ${teamPriceTotalMinor - teamCostTotalMinor < 0 ? 'text-critical' : 'text-ink'}`}>
+                        {fmtMoneyWhole(teamPriceTotalMinor - teamCostTotalMinor)}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right tabular">{fmtMoneyWhole(teamCostTotalMinor)}</td>
+                  <td className="px-2 py-1.5 text-right tabular">{fmtMoneyWhole(teamPriceTotalMinor)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+
+        {/* --------------------------------------------- External partners */}
+        <Card as="section">
+          <h2 className="display text-lg mb-1">External partners</h2>
+          <p className="text-sm text-ink-muted mb-3 max-w-3xl">
+            Named partners at a fixed fee, or on an hourly, daily or retainer basis where the
+            work is time-based, itemised at what OuterEdit pays. The mark-up below is a pricing
+            event applied only in the ladder, never a recorded cost.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -982,6 +1506,59 @@ export default function PlanQuoteFlow() {
             </Card>
           </div>
         </section>
+
+        {/* ---------------------------------------------- Profit summary */}
+        <Card as="section">
+          <h2 className="display text-lg mb-1">Profit summary</h2>
+          <p className="text-sm text-ink-muted mb-3 max-w-3xl">
+            Two readings of the modelled fee of {fmtMoneyWhole(summaryFeeMinor)} over{' '}
+            {summaryMonths} {summaryMonths === 1 ? 'month' : 'months'}. The first deducts
+            external costs only; the second also carries internal cost, contingency and the
+            overhead allocation from the ladder.
+          </p>
+          <LedgerTable
+            caption="Profit summary: after external costs only, and true profit"
+            head={<tr><Th>Reading</Th><Th num>Profit</Th><Th num>Profit per month</Th><Th num>Margin</Th></tr>}
+          >
+            <tr>
+              <Td>
+                Profit after external costs only
+                <span className="block text-xs text-ink-faint">
+                  Fee less external costs of {fmtMoneyWhole(ladder.externalCostMinor)}
+                </span>
+              </Td>
+              <Td num className={profitAfterExternalMinor < 0 ? 'text-critical' : ''}>
+                {fmtMoneyWhole(profitAfterExternalMinor)}
+              </Td>
+              <Td num className={profitAfterExternalMinor < 0 ? 'text-critical' : ''}>
+                {fmtMoneyWhole(roundHalfUp(profitAfterExternalMinor / summaryMonths))}
+              </Td>
+              <Td num className={profitAfterExternalMinor < 0 ? 'text-critical' : ''}>
+                {fmtPct(summaryMargin(profitAfterExternalMinor))}
+              </Td>
+            </tr>
+            <tr>
+              <Td>
+                True profit
+                <span className="block text-xs text-ink-faint">
+                  Fee less internal cost {fmtMoneyWhole(ladder.internalCostMinor)}, external
+                  costs {fmtMoneyWhole(ladder.externalCostMinor)}, contingency{' '}
+                  {fmtMoneyWhole(ladder.contingencyMinor)} and overhead allocation{' '}
+                  {fmtMoneyWhole(ladder.overheadRecoveryMinor)}
+                </span>
+              </Td>
+              <Td num className={trueProfitMinor < 0 ? 'text-critical' : ''}>
+                {fmtMoneyWhole(trueProfitMinor)}
+              </Td>
+              <Td num className={trueProfitMinor < 0 ? 'text-critical' : ''}>
+                {fmtMoneyWhole(roundHalfUp(trueProfitMinor / summaryMonths))}
+              </Td>
+              <Td num className={trueProfitMinor < 0 ? 'text-critical' : ''}>
+                {fmtPct(summaryMargin(trueProfitMinor))}
+              </Td>
+            </tr>
+          </LedgerTable>
+        </Card>
 
         {/* --------------------------------------- Scenarios & Approval */}
         <Card as="section">

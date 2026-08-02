@@ -3,7 +3,7 @@
 // decision comes from @oe/policy (R6). Screens never compute or authorise.
 
 import { can, type Actor, type MaskKind } from '@oe/policy';
-import type { TimeEntry, Project, YearMonth, CalendarDate } from '@oe/domain';
+import type { TimeEntry, Project, Quotation, YearMonth, CalendarDate } from '@oe/domain';
 import { SG_PUBLIC_HOLIDAYS } from '@oe/fixtures';
 import { hasModule, todayStr } from './settings';
 import { activityById } from './timeMath';
@@ -705,6 +705,76 @@ export function getQuotations(account: DemoAccount) {
         clientName: project ? db.clients.find((c) => c.id === project.clientId)?.name : undefined,
       };
     });
+  });
+}
+
+/** Round F: the super admin starts a fresh estimate straight from the list.
+ *  Creates a placeholder project in estimating status and a blank draft
+ *  quotation, so the workbench opens on an empty page. Same access family as
+ *  the rest of quote approval: super admin, ops admin, leadership. */
+export function createDraftQuotation(account: DemoAccount) {
+  return call('quotes.createDraft', () => {
+    if (account.isExternal) throw new Error('not_allowed');
+    if (!['super_admin', 'ops_admin', 'leadership'].some((r) => account.roles.includes(r))) {
+      throw new Error('not_allowed');
+    }
+    const addMonthsStr = (dateStr: string, months: number): string => {
+      const d = new Date(`${dateStr}T00:00:00Z`);
+      d.setUTCMonth(d.getUTCMonth() + months);
+      return d.toISOString().slice(0, 10);
+    };
+    const now = `${todayStr()}T12:00:00Z`;
+    const projectId = newId('prj');
+    const project = {
+      id: projectId, createdAt: now, createdBy: account.userId,
+      updatedAt: now, updatedBy: account.userId,
+      code: `OE-${todayStr().slice(2, 4)}${String(db.projects.length + 1).padStart(2, '0')}`,
+      name: 'New estimate',
+      clientId: '',
+      projectType: 'creative_direction',
+      serviceLine: 'creative_direction',
+      status: 'estimating',
+      leadId: account.userId,
+      teamIds: [],
+      country: 'SG',
+      currency: 'SGD',
+      contractValueMinor: 0,
+      startDate: todayStr(),
+      targetEndDate: addMonthsStr(todayStr(), 3),
+      isProBono: false,
+      riskFlags: [],
+    } as Project;
+    db.projects.push(project);
+    const quotation = {
+      id: newId('qte'),
+      createdAt: now, createdBy: account.userId,
+      updatedAt: now, updatedBy: account.userId,
+      projectId,
+      version: 1,
+      issuedDate: todayStr(),
+      status: 'draft',
+      lineItems: [],
+      subtotalMinor: 0,
+      gstRate: 0.09,
+      gstMinor: 0,
+      totalMinor: 0,
+      currency: 'SGD',
+      inclusions: [],
+      exclusions: [],
+      clauseIds: [],
+      periodOfEngagement: 'To be confirmed',
+      validUntil: addMonthsStr(todayStr(), 1),
+      pricing: {
+        estHours: 0, internalCostMinor: 0, loadedCheckMinor: 0, externalCostMinor: 0,
+        externalSellMinor: 0, expensesMinor: 0, contingencyMinor: 0, overheadRecoveryMinor: 0,
+        totalCostMinor: 0, negotiationFloorMinor: 0, minimumSafePriceMinor: 0,
+        recommendedPriceMinor: 0, externalMarkUpPct: 0.2, contingencyPct: 0.1,
+        targetGrossMarginPct: 0.5,
+      },
+    } as Quotation;
+    db.quotations.push(quotation);
+    audit({ actorUserId: account.userId, entityType: 'Quotation', entityId: quotation.id, action: 'create' });
+    return quotation;
   });
 }
 
