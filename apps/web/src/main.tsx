@@ -6,7 +6,14 @@ import { router } from './routes/router';
 import './styles/index.css';
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      // A refusal is an answer, not a fault: never retry permission denials.
+      retry: (failureCount, error) =>
+        !(error instanceof Error && error.message === 'not_allowed') && failureCount < 1,
+    },
+  },
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

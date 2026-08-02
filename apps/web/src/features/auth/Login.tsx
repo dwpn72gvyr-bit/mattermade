@@ -88,7 +88,7 @@ export default function Login() {
               <div className="font-medium text-base">Workspace data</div>
               <p className="text-sm text-ink-muted mt-0.5">
                 {fresh
-                  ? 'Fresh workspace: fictional projects and hours are off. Everything you see will be what you put in.'
+                  ? 'Fresh workspace: fictional projects, hours and leads are off. Working data starts from what you put in; the studio itself (people, salaries, the real P&L) remains.'
                   : 'Demo dataset: twelve fictional projects and a year of mapped time, so every screen has something to say.'}
               </p>
             </div>

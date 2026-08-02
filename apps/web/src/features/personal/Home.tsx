@@ -86,7 +86,7 @@ type Range = 'week' | 'month' | 'fy';
 export default function Home() {
   const account = useAccount();
   const today = useSession((s) => s.today);
-  const firstName = account.name.split(' ')[0];
+  const firstName = account.shortName;
 
   const schedule = useMemo(() => {
     const s = db.workSchedules.find((w) => w.personId === account.personId);

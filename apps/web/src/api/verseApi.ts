@@ -6,7 +6,7 @@ import { can } from '@oe/policy';
 import type { Collaborator } from '@oe/domain';
 import { call } from './transport';
 import { db, newId, nowIso, type VerseProfile, VERSE_CATEGORIES, VERSE_CAPABILITIES } from './db';
-import { todayStr } from './settings';
+import { hasModule, todayStr } from './settings';
 import { actorFor } from './actor';
 import type { DemoAccount } from './demoAccounts';
 
@@ -31,6 +31,7 @@ function profileFor(collaboratorId: string): VerseProfile {
 
 function requireInternal(account: DemoAccount): void {
   if (account.isExternal) throw new Error('not_allowed');
+  if (!hasModule(account.userId, account.roles, 'verse')) throw new Error('not_allowed');
 }
 
 export function searchVerse(account: DemoAccount, query = '') {

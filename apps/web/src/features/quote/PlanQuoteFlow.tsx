@@ -18,7 +18,7 @@ import { getQuotations, getTemplates } from '../../api/queries';
 import { convertQuoteToProject } from '../../api/projectOps';
 import { todayStr } from '../../api/settings';
 import { Banner, Button, Card, PageHeader, Stat, LedgerTable, Td, Th } from '../../components/ui';
-import { fmtMoneyWhole, fmtPct } from '../../lib/format';
+import { fmtDate, fmtMoneyWhole, fmtPct } from '../../lib/format';
 
 // The same six roles as the effort grid has always carried.
 const ROLES: { key: string; label: string }[] = [
@@ -659,7 +659,7 @@ export default function PlanQuoteFlow() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Stat label="Client" value={record?.clientName ?? 'To be confirmed'} />
             <Stat label="Service line" value={record?.project?.serviceLine.replace(/_/g, ' ') ?? 'To be confirmed'} />
-            <Stat label="Window" value={record?.project ? `${record.project.startDate} to ${record.project.targetEndDate}` : 'To be confirmed'} />
+            <Stat label="Window" value={record?.project ? `${fmtDate(record.project.startDate)} to ${fmtDate(record.project.targetEndDate)}` : 'To be confirmed'} />
             <Stat
               label="Duration"
               value={

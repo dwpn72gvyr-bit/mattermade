@@ -5,7 +5,7 @@
 import { can, type Actor, type MaskKind } from '@oe/policy';
 import type { TimeEntry, Project, YearMonth, CalendarDate } from '@oe/domain';
 import { SG_PUBLIC_HOLIDAYS } from '@oe/fixtures';
-import { todayStr } from './settings';
+import { hasModule, todayStr } from './settings';
 import { activityById } from './timeMath';
 import { activeMonths } from './db';
 import { call } from './transport';
@@ -593,6 +593,7 @@ export function reopenPeriod(account: DemoAccount, yearMonth: YearMonth, reason:
 export function getDirectory(account: DemoAccount) {
   return call('people.directory', () => {
     if (account.isExternal) throw new Error('not_allowed'); // hard wall (§7.2)
+    if (!hasModule(account.userId, account.roles, 'directory')) throw new Error('not_allowed');
     return db.people.map((p) => ({
       id: p.id, name: p.name, title: p.title, team: p.team, roleKey: p.roleKey,
       skills: p.skills, employmentStatus: p.employmentStatus,
@@ -603,6 +604,10 @@ export function getDirectory(account: DemoAccount) {
 export function getPerson(account: DemoAccount, personId: string) {
   return call('people.person', () => {
     if (account.isExternal) throw new Error('not_allowed'); // hard wall (§7.2)
+    // Your own page is always yours; other profiles need the Directory module.
+    if (personId !== account.personId && !hasModule(account.userId, account.roles, 'directory')) {
+      throw new Error('not_allowed');
+    }
     const actor = actorFor(account);
     const person = db.people.find((p) => p.id === personId);
     if (!person) throw new Error('not_found');
@@ -690,10 +695,8 @@ export function getAudit(account: DemoAccount) {
 
 export function getQuotations(account: DemoAccount) {
   return call('quotes.list', () => {
-    const allowed = ['leadership', 'finance_admin', 'project_lead', 'super_admin'].some((r) =>
-      account.roles.includes(r),
-    );
-    if (!allowed) throw new Error('not_allowed');
+    if (account.isExternal) throw new Error('not_allowed');
+    if (!hasModule(account.userId, account.roles, 'plan_quote')) throw new Error('not_allowed');
     return db.quotations.map((q) => {
       const project = db.projects.find((p) => p.id === q.projectId);
       return {

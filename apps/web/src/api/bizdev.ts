@@ -4,7 +4,7 @@
 
 import { call } from './transport';
 import { db, newId, type Lead, type LeadStage } from './db';
-import { todayStr } from './settings';
+import { hasModule, todayStr } from './settings';
 import type { DemoAccount } from './demoAccounts';
 import { saveProject } from './projectOps';
 
@@ -17,9 +17,9 @@ export const STAGES: { key: LeadStage; label: string; blurb: string }[] = [
 ];
 
 function canBizdev(account: DemoAccount): boolean {
-  return ['super_admin', 'ops_admin', 'leadership', 'finance_admin'].some((r) =>
-    account.roles.includes(r),
-  ) || account.roles.includes('project_lead');
+  // Module access is the single word on who holds this chamber (item 14):
+  // role defaults plus the super admin's explicit grants and withdrawals.
+  return !account.isExternal && hasModule(account.userId, account.roles, 'bizdev');
 }
 
 export function getLeads(account: DemoAccount) {

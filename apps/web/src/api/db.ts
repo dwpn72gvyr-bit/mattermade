@@ -210,8 +210,98 @@ export function audit(rec: Omit<AuditRecord, 'id' | 'occurredAt'> & { occurredAt
   } as AuditRecord);
 }
 
+// ---------------------------------------------------------------------------
+// Demo-mode recency (QA finding 5): the fixture window ends mid-2026, so in
+// demo mode we lay deterministic entries across the last four weeks (excluding
+// today) over the still-open projects, keeping ring walls, completeness and
+// the current month's cockpit alive on any real date. §6.9 example projects
+// stay untouched so their published figures hold.
+// ---------------------------------------------------------------------------
+
+function seedRecentDemoEntries(): void {
+  const today = todayStr();
+  const activityId = (name: string) => db.activities.find((a) => a.name === name)?.id;
+  const projectWork = activityId('Design');
+  const pm = activityId('Project management');
+  const bd = activityId('Business development');
+  const internal = activityId('Internal meeting');
+  if (!projectWork || !pm || !bd || !internal) return;
+
+  const openProjects = db.projects.filter(
+    (p) => p.status === 'active' && p.targetEndDate >= today && !p.baseline,
+  );
+
+  for (const person of db.people) {
+    const schedule = db.workSchedules.find((w) => w.personId === person.id);
+    const hoursPerDay = schedule?.hoursPerDay ?? 8;
+    const fourDay = schedule?.daysPerWeek === 4;
+    const mine = openProjects.filter((p) => (p.teamIds ?? []).includes(person.id));
+    const cursor = new Date(`${today}T00:00:00Z`);
+    for (let back = 1; back <= 28; back += 1) {
+      const d = new Date(cursor.getTime() - back * 86_400_000);
+      const date = d.toISOString().slice(0, 10);
+      const dow = d.getUTCDay();
+      const workday = fourDay ? dow >= 1 && dow <= 4 : dow >= 1 && dow <= 5;
+      if (!workday) continue;
+      if (db.timeEntries.some((e) => e.personId === person.id && e.date === date)) continue;
+      const total = hoursPerDay * 60;
+      const isBdPerson = person.roleKey === 'founder' || person.roleKey === 'creative_director';
+      const companyAct = isBdPerson ? bd : internal;
+      const project = mine[(back + person.id.length) % Math.max(1, mine.length)];
+      const push = (minutes: number, actId: string, projectId?: string) => {
+        if (minutes <= 0) return;
+        db.timeEntries.push({
+          id: `te-recent-${person.id}-${date}-${actId}`,
+          createdAt: `${date}T10:00:00Z`, createdBy: 'system',
+          updatedAt: `${date}T10:00:00Z`, updatedBy: 'system',
+          personId: person.id, date, minutes, activityId: actId,
+          ...(projectId ? { projectId } : {}),
+          source: 'manual', status: 'confirmed',
+        } as TimeEntry);
+      };
+      if (project) {
+        const projMinutes = Math.round((total * 0.7) / 15) * 15;
+        push(projMinutes, back % 3 === 0 ? pm : projectWork, project.id);
+        push(total - projMinutes, companyAct);
+      } else {
+        push(total, companyAct);
+      }
+    }
+  }
+}
+
+function seedDemoLeads(): void {
+  const mk = (
+    id: string, name: string, organisation: string, stage: LeadStage,
+    estFee: number, probability: number, nextStep: string, daysOut: number,
+    serviceLine: string,
+  ): Lead => {
+    const base = new Date(`${todayStr()}T00:00:00Z`);
+    const nextDate = new Date(base.getTime() + daysOut * 86_400_000).toISOString().slice(0, 10);
+    return {
+      id, name, organisation, stage,
+      estFeeMinor: estFee * 100, probability,
+      nextStep, nextStepDate: nextDate,
+      serviceLine,
+      notes: [{ at: `${todayStr()}T02:00:00Z`, by: 'Ryan Tan', body: 'Logged from the demo seed.' }],
+      ownerUserId: 'usr-ryan',
+      createdAt: `${todayStr()}T02:00:00Z`,
+      updatedAt: `${todayStr()}T02:00:00Z`,
+    };
+  };
+  db.leads.push(
+    mk('lead-demo-1', 'Riverfront Night Market identity', 'Riveredge Collective', 'tofu', 45_000, 0.2, 'Coffee with the programme director', 6, 'brand_identity'),
+    mk('lead-demo-2', 'Wellness quarter placemaking study', 'Cedar Health Group', 'tofu', 120_000, 0.25, 'Send credentials deck', 3, 'placemaking'),
+    mk('lead-demo-3', 'Annual report and campaign refresh', 'Meridian Institute', 'mofu', 60_000, 0.45, 'Scope workshop, their office', 8, 'campaign'),
+    mk('lead-demo-4', 'Heritage gallery experience design', 'Straits Heritage Board', 'bofu', 240_000, 0.65, 'Proposal presented; decision expected', 12, 'exhibition'),
+    mk('lead-demo-5', 'Boutique hotel rebrand', 'Auric Hotels', 'parked', 95_000, 0.1, 'Revisit after their renovation budget lands', 60, 'brand_identity'),
+  );
+}
+
 // Seed the trail with the dataset's notable events (demo mode only).
 if (!isFreshMode()) {
+  seedRecentDemoEntries();
+  seedDemoLeads();
   audit({ actorUserId: 'usr-daniel', entityType: 'EmploymentAgreement', entityId: 'ea-mei-2', action: 'create', reason: 'Annual review adjustment', occurredAt: '2025-12-15T03:00:00Z' });
   audit({ actorUserId: 'usr-ryan', entityType: 'EmploymentAgreement', entityId: 'ea-mei-2', action: 'approve', reason: 'Second super admin confirmation', occurredAt: '2025-12-15T05:00:00Z' });
   audit({ actorUserId: 'usr-ryan', entityType: 'Variation', entityId: 'var-f-1', action: 'approve', occurredAt: '2026-04-14T06:00:00Z' });

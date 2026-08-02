@@ -26,7 +26,20 @@ export default function ModuleAccess() {
   const update = useMutation({
     mutationFn: (args: { userId: string; module: ModuleKey; allowed: boolean }) =>
       updateModuleAccess(account, args.userId, args.module, args.allowed),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['module-access'] }),
+    onMutate: async (args) => {
+      // Optimistic flip so the box answers the click immediately.
+      await qc.cancelQueries({ queryKey: ['module-access', account.userId] });
+      qc.setQueryData<Awaited<ReturnType<typeof getModuleAccess>>>(
+        ['module-access', account.userId],
+        (rows) =>
+          rows?.map((r) =>
+            r.userId === args.userId
+              ? { ...r, access: { ...r.access, [args.module]: args.allowed } }
+              : r,
+          ),
+      );
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['module-access'] }),
   });
 
   if (table.isError) {

@@ -108,6 +108,45 @@ await switchTo('usr-mei');
   const prj = await bodyText();
   check('Mei', 'project page: no Financials tab for team member', !/Financials/.test(prj));
   check('Mei', 'project page: health cards render', /Hours consumed/.test(prj));
+
+  // Module withdrawal holds at the API layer, not just the sidebar (QA-2 f1).
+  await page.goto(`${BASE}/verse`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  const verseDenied = await bodyText();
+  check('Mei', 'verse denied by URL for plain team member',
+    /isn't part of your access/.test(verseDenied) && !/Farhan|Teck Heng/.test(verseDenied));
+  await page.goto(`${BASE}/people`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  check('Mei', 'directory denied by URL for plain team member',
+    /isn't part of your access/.test(await bodyText()));
+  await page.goto(`${BASE}/plan-quote`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  check('Mei', 'plan & quote denied by URL for plain team member',
+    /isn't part of your access/.test(await bodyText()));
+}
+
+// ------------------------------------------------- module grant round-trip
+await switchTo('usr-ryan');
+{
+  await page.goto(`${BASE}/admin/access`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  await page.locator('input[aria-label="Mei Chen: Plan & Quote"]').setChecked(true, { force: true });
+  await page.waitForTimeout(800);
+}
+await switchTo('usr-mei');
+{
+  const nav = (await navTexts()).join('|');
+  check('Mei+grant', 'granted module appears in nav', /Plan & Quote/.test(nav));
+  await page.goto(`${BASE}/plan-quote`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  check('Mei+grant', 'granted module actually opens', /Harbourline|Plan & Quote/.test(await bodyText()) && !/isn't part of your access/.test(await bodyText()));
+}
+await switchTo('usr-ryan');
+{
+  await page.goto(`${BASE}/admin/access`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  await page.locator('input[aria-label="Mei Chen: Plan & Quote"]').setChecked(false, { force: true });
+  await page.waitForTimeout(800);
 }
 
 // ---------------------------------------------------------------- Ryan (super admin)
