@@ -7,7 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../../stores/session';
 import { searchVerse, VERSE_CATEGORIES } from '../../api/verseApi';
-import { Banner, Button, Card, PageHeader, StatusChip } from '../../components/ui';
+import { Banner, Button, Card, PageHeader, StatusChip, NewBadge } from '../../components/ui';
 import { Stars, VerseProfileEditor, VERSE_EDITOR_ROLES } from './CollaboratorProfile';
 
 const field = 'w-full border border-line rounded-financial bg-raised px-3 py-2 text-base';
@@ -111,7 +111,7 @@ export default function VerseDirectory() {
           <Card key={c.id}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <Link to={`/verse/${c.id}`} className="font-medium text-base hover:text-accent">{c.name}</Link>
+                <Link to={`/verse/${c.id}`} className="font-medium text-base hover:text-accent">{c.name}</Link><NewBadge createdAt={c.createdAt} />
                 <div className="text-sm text-ink-muted">{p.category ?? c.discipline}</div>
                 <div className="text-xs text-ink-faint">{c.location}</div>
               </div>

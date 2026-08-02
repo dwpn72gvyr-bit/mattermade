@@ -42,9 +42,9 @@ export default function Login() {
       <main className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-3xl">
           <header className="text-center mb-8 settle-in">
-            <div className="display text-2xl">OuterEdit</div>
-            <div className="text-xs tracking-[0.3em] uppercase text-ink-faint mt-1">
-              Studio Console
+            <div className="font-ui font-extrabold text-2xl tracking-tight">OUTEREDIT</div>
+            <div className="brand-label text-xs text-ink-faint mt-1">
+              Studio Console · Est. 2011, Singapore
             </div>
             <p className="text-ink-muted mt-4 max-w-md mx-auto">
               Welcome. This console exists so we price fairly, protect your time, and build a

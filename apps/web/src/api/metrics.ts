@@ -18,7 +18,7 @@ import { db, activeMonths } from './db';
 import { todayStr } from './settings';
 import {
   costedProjectEntries, projectEntries, computeMonthlyTieOuts, paidRateOn,
-  activityById,
+  activityById, scheduledMinutesOn,
 } from './timeMath';
 
 /** Demo FX for aggregating USD projects into SGD company views.
@@ -411,3 +411,74 @@ export function companyMonthMetrics(period: YearMonth) {
 }
 
 export type CompanyMonthMetrics = ReturnType<typeof companyMonthMetrics>;
+
+// ---------------------------------------------------------------------------
+// Complimentary overtime lens (client direction, round F). The official day is
+// 8 scheduled hours; hours mapped beyond it, and any hours on weekends or
+// closed days, are intelligence the studio received with the team's
+// compliments. They never enter official cost or profit (R2, §6): this lens
+// values them separately so profitability reports can end with an honest
+// acknowledgement of the gift.
+// ---------------------------------------------------------------------------
+
+export interface ProjectOvertime {
+  minutes: number;
+  /** Valued at each person's paid rate on the day, for scale only. */
+  complimentaryValueMinor: number;
+  byPerson: { personId: string; name: string; minutes: number; valueMinor: number }[];
+}
+
+export function projectOvertime(projectId: string): ProjectOvertime {
+  // Overtime is a property of a person's day, not of a single entry: a day is
+  // in overtime once the person's total costed project minutes pass their
+  // schedule. The excess is attributed to this project by its share of the
+  // day's project minutes.
+  const acc = new Map<string, { minutes: number; valueMinor: number }>();
+
+  const costedMinutes = (e: { activityId: string; minutes: number }) =>
+    activityById(e.activityId)?.includedInProjectCosting ? e.minutes : 0;
+
+  const personDays = new Map<string, Map<string, typeof db.timeEntries>>();
+  for (const e of db.timeEntries) {
+    if (!e.projectId) continue;
+    const days = personDays.get(e.personId) ?? new Map();
+    personDays.set(e.personId, days);
+    const list = days.get(e.date) ?? [];
+    list.push(e);
+    days.set(e.date, list);
+  }
+
+  for (const [personId, days] of personDays) {
+    for (const [date, entries] of days) {
+      const dayTotal = entries.reduce((s, e) => s + costedMinutes(e), 0);
+      if (dayTotal === 0) continue;
+      const overtime = Math.max(0, dayTotal - scheduledMinutesOn(personId, date));
+      if (overtime === 0) continue;
+      const projectShare = entries
+        .filter((e) => e.projectId === projectId)
+        .reduce((s, e) => s + costedMinutes(e), 0);
+      if (projectShare === 0) continue;
+      const minutes = roundHalfUp(overtime * (projectShare / dayTotal));
+      const valueMinor = roundHalfUp((minutes / 60) * paidRateOn(personId, date));
+      const cur = acc.get(personId) ?? { minutes: 0, valueMinor: 0 };
+      acc.set(personId, {
+        minutes: cur.minutes + minutes,
+        valueMinor: cur.valueMinor + valueMinor,
+      });
+    }
+  }
+
+  const byPerson = [...acc.entries()]
+    .map(([personId, v]) => ({
+      personId,
+      name: db.people.find((p) => p.id === personId)?.name ?? personId,
+      ...v,
+    }))
+    .sort((a, b) => b.minutes - a.minutes);
+
+  return {
+    minutes: byPerson.reduce((s, p) => s + p.minutes, 0),
+    complimentaryValueMinor: byPerson.reduce((s, p) => s + p.valueMinor, 0),
+    byPerson,
+  };
+}

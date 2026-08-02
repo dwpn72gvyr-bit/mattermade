@@ -73,7 +73,7 @@ export default function ModuleAccess() {
               <Td key={m.key}>
                 <input
                   type="checkbox"
-                  className="w-4 h-4 accent-[#3D5A4C]"
+                  className="w-4 h-4 accent-[#FC712B]"
                   aria-label={`${row.name}: ${m.label}`}
                   checked={row.access[m.key]}
                   onChange={(e) => update.mutate({ userId: row.userId, module: m.key, allowed: e.target.checked })}

@@ -8,7 +8,8 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession } from '../stores/session';
-import { hasModule } from '../api/settings';
+import { applyTheme, getTheme, hasModule, type ThemeChoice } from '../api/settings';
+import { maybeDailyBackup } from '../api/backup';
 import { useQuery } from '@tanstack/react-query';
 import { getDay } from '../api/queries';
 
@@ -90,7 +91,8 @@ function navFor(userId: string, roles: string[], isExternal: boolean | undefined
           ? [
               { to: '/admin/access', label: 'Module access' },
               { to: '/admin/audit', label: 'Audit log' },
-              { to: '/admin/settings', label: 'Financial settings' },
+              { to: '/admin/settings', label: 'Console settings' },
+              { to: '/admin/backup', label: 'Data backup' },
             ]
           : []),
       ],
@@ -110,6 +112,11 @@ function readCollapsed(): Record<string, boolean> {
   }
 }
 
+/** Sections close by default for a cleaner column; a stored choice wins. */
+function isCollapsed(prefs: Record<string, boolean>, key: string): boolean {
+  return prefs[key] ?? true;
+}
+
 export default function AppShell() {
   const account = useSession((s) => s.account);
   const signOut = useSession((s) => s.signOut);
@@ -117,6 +124,7 @@ export default function AppShell() {
   const navigate = useNavigate();
   const [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed);
+  const [theme, setTheme] = useState<ThemeChoice>(getTheme);
   const [reminderDismissed, setReminderDismissed] = useState(
     () => {
       try {
@@ -137,6 +145,11 @@ export default function AppShell() {
       window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed));
     } catch { /* session-only */ }
   }, [collapsed]);
+
+  // Round F: the day's CSV backup saves itself once per day for the super admin.
+  useEffect(() => {
+    if (account) maybeDailyBackup(account);
+  }, [account?.userId, today]);
 
   if (!account) return <Navigate to="/login" replace />;
 
@@ -166,23 +179,28 @@ export default function AppShell() {
         aria-label="Main navigation"
       >
         <div className="px-5 py-4 border-b border-line">
-          <div className="display text-lg leading-tight">OuterEdit</div>
-          <div className="text-xs text-ink-faint tracking-wide uppercase mt-0.5">Studio Console</div>
+          <div className="font-ui font-extrabold text-md tracking-tight leading-tight">OUTEREDIT</div>
+          <div className="brand-label text-[10px] text-ink-faint mt-0.5">Studio Console · Est. 2011, Singapore</div>
         </div>
         <nav className="flex-1 overflow-y-auto py-3">
           {groups.map((g) => {
-            const isCollapsed = collapsed[g.key] ?? false;
+            const activeHere = g.items.some((item) =>
+              item.to === '/'
+                ? window.location.pathname === '/'
+                : window.location.pathname.startsWith(item.to),
+            );
+            const closed = isCollapsed(collapsed, g.key) && !activeHere;
             return (
               <div key={g.key} className="mb-2">
                 <button
-                  className="w-full flex items-center justify-between px-5 py-1.5 text-xs uppercase tracking-wider text-ink-faint hover:text-ink"
-                  aria-expanded={!isCollapsed}
-                  onClick={() => setCollapsed((c) => ({ ...c, [g.key]: !isCollapsed }))}
+                  className={`w-full flex items-center justify-between px-5 py-1.5 text-xs uppercase tracking-wider hover:text-ink ${activeHere ? 'text-ink font-semibold' : 'text-ink-faint'}`}
+                  aria-expanded={!closed}
+                  onClick={() => setCollapsed((c) => ({ ...c, [g.key]: !closed }))}
                 >
                   <span>{g.label}</span>
-                  <span aria-hidden="true" className="text-[10px]">{isCollapsed ? '▸' : '▾'}</span>
+                  <span aria-hidden="true" className="text-[10px]">{closed ? '▸' : '▾'}</span>
                 </button>
-                {!isCollapsed && (
+                {!closed && (
                   <ul>
                     {g.items.map((item) => (
                       <li key={item.to}>
@@ -193,7 +211,7 @@ export default function AppShell() {
                           className={({ isActive }) =>
                             `block px-5 py-1.5 text-base transition-colors duration-settle ${
                               isActive
-                                ? 'text-accent font-medium border-r-2 border-accent bg-accent/5'
+                                ? 'text-accent font-bold border-r-2 border-accent bg-accent/10'
                                 : 'text-ink-muted hover:text-ink hover:bg-sunken/60'
                             }`
                           }
@@ -208,8 +226,20 @@ export default function AppShell() {
             );
           })}
         </nav>
-        <div className="border-t border-line px-5 py-3 text-xs text-ink-faint space-y-1">
+        <div className="border-t border-line px-5 py-3 text-xs text-ink-faint space-y-2">
           <div className="tabular">{today}</div>
+          <div className="flex items-center gap-1" role="group" aria-label="Theme">
+            {(['light', 'dark', 'system'] as const).map((t) => (
+              <button
+                key={t}
+                aria-pressed={theme === t}
+                className={`px-1.5 py-0.5 rounded-sm border ${theme === t ? 'border-accent text-accent' : 'border-transparent hover:text-ink'}`}
+                onClick={() => { setTheme(t); applyTheme(t); }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
           <NavLink to="/styleguide" className="underline hover:text-ink block">Styleguide</NavLink>
         </div>
       </aside>

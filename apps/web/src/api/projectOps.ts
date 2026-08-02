@@ -6,7 +6,7 @@
 import type { Project, ProjectPhase } from '@oe/domain';
 import { call } from './transport';
 import { db, newId, nowIso, type ProjectNote } from './db';
-import { todayStr } from './settings';
+import { optionList, todayStr } from './settings';
 import type { DemoAccount } from './demoAccounts';
 
 function canManageProjects(account: DemoAccount): boolean {
@@ -149,12 +149,7 @@ export function getPeopleOptions(account: DemoAccount) {
   return call('projects.peopleOptions', () => ({
     people: db.people.map((p) => ({ id: p.id, name: p.name, title: p.title })),
     users: db.users.map((u) => ({ id: u.id, email: u.email })),
-    serviceLines: [
-      'brand_strategy', 'brand_identity', 'creative_direction', 'campaign',
-      'spatial_activation', 'installation', 'exhibition', 'experience_design',
-      'placemaking', 'community_engagement', 'cultural_programming', 'festival',
-      'event_activation',
-    ],
+    serviceLines: optionList('service_lines'),
   }));
 }
 

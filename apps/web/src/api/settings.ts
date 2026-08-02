@@ -98,3 +98,110 @@ export function todayStr(): string {
 export function currentMonth(): string {
   return todayStr().slice(0, 7);
 }
+
+
+// ---------------------------------------------------------------------------
+// Theme (brand guide: one system, light and dark expressions).
+// ---------------------------------------------------------------------------
+
+export type ThemeChoice = 'light' | 'dark' | 'system';
+const THEME_KEY = 'oe-console-theme';
+
+export function getTheme(): ThemeChoice {
+  const t = storage()?.getItem(THEME_KEY);
+  return t === 'light' || t === 'dark' ? t : 'system';
+}
+
+export function applyTheme(choice: ThemeChoice): void {
+  storage()?.setItem(THEME_KEY, choice);
+  const dark =
+    choice === 'dark' ||
+    (choice === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', dark);
+}
+
+/** NEW-item window in days (client direction, round F). Super admin editable. */
+const NEW_DAYS_KEY = 'oe-console-new-days';
+
+export function newItemWindowDays(): number {
+  const raw = Number(storage()?.getItem(NEW_DAYS_KEY));
+  return raw >= 1 && raw <= 60 ? raw : 7;
+}
+
+export function setNewItemWindowDays(days: number): void {
+  storage()?.setItem(NEW_DAYS_KEY, String(Math.min(60, Math.max(1, Math.round(days)))));
+}
+
+/** Is a created/updated stamp within the NEW window? Accepts ISO datetimes or dates. */
+export function isNew(createdAt: string | undefined): boolean {
+  if (!createdAt) return false;
+  const created = Date.parse(createdAt.slice(0, 10) + 'T00:00:00Z');
+  if (Number.isNaN(created)) return false;
+  const today = Date.parse(todayStr() + 'T00:00:00Z');
+  return (today - created) / 86_400_000 <= newItemWindowDays();
+}
+
+// ---------------------------------------------------------------------------
+// Option lists (client direction, round F): the choice lists behind service
+// lines and OE Verse fields are the super admin's to extend, so the console
+// grows with the studio rather than waiting on a release.
+// ---------------------------------------------------------------------------
+
+export type OptionListKey =
+  | 'service_lines' | 'verse_categories' | 'verse_capabilities' | 'verse_engagements';
+
+const OPTIONS_KEY = 'oe-console-option-lists';
+
+export const OPTION_LIST_DEFAULTS: Record<OptionListKey, string[]> = {
+  service_lines: [
+    'brand_strategy', 'brand_identity', 'creative_direction', 'campaign',
+    'spatial_activation', 'installation', 'exhibition', 'experience_design',
+    'placemaking', 'community_engagement', 'cultural_programming', 'festival',
+    'event_activation',
+  ],
+  verse_categories: [
+    'Design', 'Creative Strategist / Copywriter / Content Planner', 'Producer',
+    'Marketing', 'Activations', 'Creative Strategy', 'Admin', 'Spatial Collaborators',
+    'Interiors', 'Exhibitions', 'Translation', 'Transcreation',
+  ],
+  verse_capabilities: [
+    'Account Management', 'Marketing', 'Strategy', 'Spatial/Experience Design',
+    'Interior Design', 'Graphic Design', 'Art Direction', 'Branding', 'Content',
+    'Animation', 'Motion Graphics', 'Photography', 'Social Media Content',
+    'Editorial', 'Copywriting', 'Videography / Film', '3D Design', 'Video Editing',
+    'Creative Direction', 'Installation Design', 'Product Design', 'Illustration',
+    'Event / Experiences', 'Digital / UIUX', 'Packaging', 'Publication', 'Rendering',
+  ],
+  verse_engagements: ['Full-time', 'Freelance', 'Short Stint', 'Internship'],
+};
+
+function readOptionLists(): Partial<Record<OptionListKey, string[]>> {
+  try {
+    const raw = storage()?.getItem(OPTIONS_KEY);
+    if (raw) return JSON.parse(raw) as Partial<Record<OptionListKey, string[]>>;
+  } catch {
+    // fall through to defaults
+  }
+  return {};
+}
+
+export function optionList(key: OptionListKey): string[] {
+  const stored = readOptionLists()[key];
+  return stored && stored.length > 0 ? stored : OPTION_LIST_DEFAULTS[key];
+}
+
+export function setOptionList(key: OptionListKey, values: string[]): void {
+  const lists = readOptionLists();
+  const cleaned = values.map((v) => v.trim()).filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i);
+  lists[key] = cleaned;
+  storage()?.setItem(OPTIONS_KEY, JSON.stringify(lists));
+}
+
+export function addOption(key: OptionListKey, value: string): void {
+  const v = value.trim();
+  if (!v) return;
+  const current = optionList(key);
+  if (current.includes(v)) return;
+  setOptionList(key, [...current, v]);
+}

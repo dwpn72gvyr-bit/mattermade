@@ -9,13 +9,13 @@ import { Banner, Card, PageHeader } from '../../components/ui';
 import { fmtMoneyWhole, fmtPeriod } from '../../lib/format';
 
 const SEGMENTS: { key: string; label: string; colour: string }[] = [
-  { key: 'project', label: 'Project labour', colour: '#3D5A4C' },
-  { key: 'Business development', label: 'Business development', colour: '#3E5C7A' },
+  { key: 'project', label: 'Project labour', colour: '#FC712B' },
+  { key: 'Business development', label: 'Business development', colour: '#3337FF' },
   { key: 'Marketing', label: 'Marketing', colour: '#6B4A7A' },
   { key: 'admin', label: 'Administration and internal', colour: '#8A5A2E' },
   { key: 'learning', label: 'Training and initiatives', colour: '#2E6E66' },
   { key: 'leave', label: 'Leave and public holidays', colour: '#98572E' },
-  { key: 'unallocated', label: 'Unallocated', colour: '#B9B2A6' },
+  { key: 'unallocated', label: 'Unallocated', colour: '#9A9A9A' },
 ];
 
 const ADMIN_KEYS = ['Company administration', 'Internal meeting'];

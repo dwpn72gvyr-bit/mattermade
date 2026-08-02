@@ -2,6 +2,7 @@
 // financial surfaces tighter and cooler: same tokens, different radius scales.
 
 import React from 'react';
+import { isNew } from '../../api/settings';
 
 type Temp = 'personal' | 'financial';
 
@@ -58,10 +59,10 @@ export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & {
     'inline-flex items-center justify-center gap-1.5 rounded-financial font-medium transition-colors duration-settle disabled:opacity-50 disabled:cursor-not-allowed';
   const sizes = size === 'sm' ? 'text-sm px-2.5 py-1' : 'text-base px-3.5 py-1.5 min-h-[36px]';
   const variants = {
-    primary: 'bg-accent text-white hover:bg-[#33503f]',
+    primary: 'bg-accent text-accent-contrast hover:bg-accent/85',
     secondary: 'bg-raised border border-line text-ink hover:bg-sunken',
     quiet: 'text-ink-muted hover:text-ink hover:bg-sunken',
-    danger: 'bg-critical text-white hover:bg-[#8f3a28]',
+    danger: 'bg-critical text-accent-contrast hover:bg-critical/85',
   }[variant];
   return <button className={`${base} ${sizes} ${variants} ${className ?? ''}`} {...rest} />;
 }
@@ -254,15 +255,15 @@ export function CompletionRing(props: { pct: number; size?: number; label: strin
   const pct = Math.min(1, raw);
   return (
     <svg width={size} height={size} role="img" aria-label={props.label}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1EDE6" strokeWidth="6" />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" className="stroke-sunken" strokeWidth="6" />
       <circle
         cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={raw > 1.05 ? '#B98A2E' : pct >= 1 ? '#4E7A52' : '#3D5A4C'} strokeWidth="6" strokeLinecap="round"
+        className={`ring-progress ${raw > 1.05 ? 'stroke-caution' : pct >= 1 ? 'stroke-positive' : 'stroke-accent'}`}
+        strokeWidth="6" strokeLinecap="round"
         strokeDasharray={c} strokeDashoffset={c * (1 - pct)}
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        className="ring-progress"
       />
-      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="tabular" fontSize={size / 4.6} fill="#2B2B2B">
+      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="tabular fill-ink" fontSize={size / 4.6}>
         {Math.round(raw * 100)}%
       </text>
     </svg>
@@ -273,7 +274,7 @@ export function CompletionRing(props: { pct: number; size?: number; label: strin
 export function Banner(props: { tone: 'info' | 'caution' | 'critical' | 'positive'; children: React.ReactNode; className?: string }) {
   const tones = {
     info: 'border-info/40 bg-info/5 text-info',
-    caution: 'border-caution/40 bg-caution/5 text-[#8a6722]',
+    caution: 'border-caution/40 bg-caution/10 text-caution',
     critical: 'border-critical/40 bg-critical/5 text-critical',
     positive: 'border-positive/40 bg-positive/5 text-positive',
   }[props.tone];
@@ -281,5 +282,17 @@ export function Banner(props: { tone: 'info' | 'caution' | 'critical' | 'positiv
     <div role="status" className={`border rounded-financial px-4 py-3 text-base ${tones} ${props.className ?? ''}`}>
       {props.children}
     </div>
+  );
+}
+
+
+/** NEW flag for recently added records (round F). The window is set by the
+ *  super admin in Financial settings. */
+export function NewBadge(props: { createdAt?: string }) {
+  if (!isNew(props.createdAt)) return null;
+  return (
+    <span className="brand-label text-[10px] text-accent border border-accent/50 rounded-sm px-1 py-[1px] ml-1 align-middle">
+      New
+    </span>
   );
 }

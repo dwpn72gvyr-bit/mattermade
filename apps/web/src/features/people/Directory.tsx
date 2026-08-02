@@ -10,7 +10,7 @@ import type { Person, RoleKey, WorkSchedule } from '@oe/domain';
 import { useAccount } from '../../stores/session';
 import { getDirectory } from '../../api/queries';
 import { db, newId, nowIso } from '../../api/db';
-import { Banner, Button, Card, PageHeader } from '../../components/ui';
+import { Banner, Button, Card, PageHeader, NewBadge } from '../../components/ui';
 
 const ROLE_KEYS: RoleKey[] = [
   'founder', 'creative_director', 'account_director', 'account_manager',
@@ -100,7 +100,7 @@ export default function Directory() {
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {people.map((p) => (
           <Card key={p.id} temp="personal">
-            <Link to={`/people/${p.id}`} className="font-medium text-base hover:text-accent">{p.name}</Link>
+            <Link to={`/people/${p.id}`} className="font-medium text-base hover:text-accent">{p.name}</Link><NewBadge createdAt={p.createdAt} />
             <div className="text-sm text-ink-muted">{p.title}</div>
             <div className="text-xs text-ink-faint mt-1">{p.team}</div>
             <div className="flex flex-wrap gap-1 mt-2">

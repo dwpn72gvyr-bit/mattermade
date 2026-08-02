@@ -11,16 +11,9 @@ import {
 } from '../../api/bizdev';
 import type { Lead, LeadStage } from '../../api/db';
 import { demoAccounts } from '../../api/demoAccounts';
-import { todayStr } from '../../api/settings';
-import { Banner, Button, Card, PageHeader, Stat, StatusChip } from '../../components/ui';
+import { optionList, todayStr } from '../../api/settings';
+import { Banner, Button, Card, NewBadge, PageHeader, Stat, StatusChip } from '../../components/ui';
 import { fmtDateShort, fmtMoneyWhole } from '../../lib/format';
-
-const SERVICE_LINES = [
-  'brand_strategy', 'brand_identity', 'creative_direction', 'campaign',
-  'spatial_activation', 'installation', 'exhibition', 'experience_design',
-  'placemaking', 'community_engagement', 'cultural_programming', 'festival',
-  'event_activation',
-];
 
 const OPEN_KEYS: LeadStage[] = ['tofu', 'mofu', 'bofu'];
 
@@ -49,11 +42,24 @@ function LeadForm(props: { initial?: Lead; onDone: () => void }) {
   const [contactName, setContactName] = useState(l?.contactName ?? '');
   const [contactEmail, setContactEmail] = useState(l?.contactEmail ?? '');
   const [source, setSource] = useState(l?.source ?? '');
-  const [serviceLine, setServiceLine] = useState(l?.serviceLine ?? 'creative_direction');
+  const serviceLines = optionList('service_lines');
+  const [serviceLine, setServiceLine] = useState(l?.serviceLine ?? serviceLines[0] ?? 'creative_direction');
   const [fee, setFee] = useState(l?.estFeeMinor !== undefined ? String(l.estFeeMinor / 100) : '');
   const [probability, setProbability] = useState(l?.probability ?? 0.3);
   const [nextStep, setNextStep] = useState(l?.nextStep ?? '');
   const [nextStepDate, setNextStepDate] = useState(l?.nextStepDate ?? '');
+  const [touched, setTouched] = useState(false);
+
+  // Inline validation (round F): a value like "(TBC)" never reaches the board.
+  // Fields that are not right flag in red and the submit stays disabled.
+  const feeError = fee.trim() !== '' && (!Number.isFinite(Number(fee)) || Number(fee) < 0)
+    ? 'Use a number in whole SGD, like 38000. Leave it empty while the value is still open.'
+    : undefined;
+  const emailError = contactEmail.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())
+    ? 'That does not read as an email address.'
+    : undefined;
+  const nameError = touched && !name.trim() ? 'Give the opportunity a name.' : undefined;
+  const orgError = touched && !organisation.trim() ? 'Name the organisation.' : undefined;
 
   const save = useMutation({
     mutationFn: () =>
@@ -76,18 +82,21 @@ function LeadForm(props: { initial?: Lead; onDone: () => void }) {
     },
   });
 
-  const ready = name.trim() && organisation.trim();
+  const ready = Boolean(name.trim() && organisation.trim()) && !feeError && !emailError;
+  const flag = (bad: boolean) => (bad ? field.replace('border-line', 'border-critical') : field);
 
   return (
     <div className="space-y-3">
       <div className="grid sm:grid-cols-2 gap-3">
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">Opportunity name</span>
-          <input className={field} value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={flag(Boolean(nameError))} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setTouched(true)} />
+          {nameError && <span className="block text-xs text-critical mt-0.5">{nameError}</span>}
         </label>
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">Organisation</span>
-          <input className={field} value={organisation} onChange={(e) => setOrganisation(e.target.value)} />
+          <input className={flag(Boolean(orgError))} value={organisation} onChange={(e) => setOrganisation(e.target.value)} onBlur={() => setTouched(true)} />
+          {orgError && <span className="block text-xs text-critical mt-0.5">{orgError}</span>}
         </label>
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">Contact name</span>
@@ -95,7 +104,8 @@ function LeadForm(props: { initial?: Lead; onDone: () => void }) {
         </label>
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">Contact email</span>
-          <input className={field} type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+          <input className={flag(Boolean(emailError))} type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+          {emailError && <span className="block text-xs text-critical mt-0.5">{emailError}</span>}
         </label>
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">Source</span>
@@ -104,14 +114,15 @@ function LeadForm(props: { initial?: Lead; onDone: () => void }) {
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">Service line</span>
           <select className={field} value={serviceLine} onChange={(e) => setServiceLine(e.target.value)}>
-            {SERVICE_LINES.map((s) => (
+            {serviceLines.map((s) => (
               <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
             ))}
           </select>
         </label>
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">Estimated fee (SGD)</span>
-          <input className={`${field} tabular`} inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} />
+          <input className={`${flag(Boolean(feeError))} tabular`} inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} />
+          {feeError && <span className="block text-xs text-critical mt-0.5">{feeError}</span>}
         </label>
         <label className="block">
           <span className="block text-sm text-ink-muted mb-0.5">
@@ -226,7 +237,7 @@ function LeadDetail(props: { lead: Lead }) {
 
       <div className="flex gap-2 flex-wrap">
         <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>Edit details</Button>
-        {lead.stage === 'bofu' && !lead.convertedProjectId && (
+        {OPEN_KEYS.includes(lead.stage) && !lead.convertedProjectId && (
           <Button variant="primary" size="sm" disabled={convert.isPending} onClick={() => { setConvertMsg(null); convert.mutate(); }}>
             Convert to project
           </Button>
@@ -255,9 +266,17 @@ function LeadCard(props: { lead: Lead; expanded: boolean; onToggle: () => void }
   const overdue = isOpen && lead.nextStepDate !== undefined && lead.nextStepDate < todayStr();
 
   return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', lead.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      className="cursor-grab active:cursor-grabbing"
+    >
     <Card className="!p-3">
       <button className="w-full text-left" onClick={props.onToggle} aria-expanded={props.expanded}>
-        <div className="font-medium text-base text-ink">{lead.name}</div>
+        <div className="font-medium text-base text-ink">{lead.name}<NewBadge createdAt={lead.createdAt} /></div>
         <div className="text-sm text-ink-muted">{lead.organisation}</div>
       </button>
       <div className="flex items-baseline justify-between gap-2 mt-1.5">
@@ -308,18 +327,51 @@ function LeadCard(props: { lead: Lead; expanded: boolean; onToggle: () => void }
 
       {props.expanded && <LeadDetail lead={lead} />}
     </Card>
+    </div>
   );
 }
 
 export default function Pipeline() {
   const account = useAccount();
+  const navigate = useNavigate();
+  const invalidate = useInvalidateBoard();
   const [adding, setAdding] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [overStage, setOverStage] = useState<LeadStage | null>(null);
+  const [boardMsg, setBoardMsg] = useState<React.ReactNode>(null);
 
   const leads = useQuery({ queryKey: ['leads', account.userId], queryFn: () => getLeads(account) });
   const summary = useQuery({
     queryKey: ['pipeline-summary', account.userId],
     queryFn: () => pipelineSummary(account),
+  });
+
+  const dropMove = useMutation({
+    mutationFn: (args: { leadId: string; stage: LeadStage }) => moveLead(account, args.leadId, args.stage),
+    onSuccess: invalidate,
+  });
+  const dropConvert = useMutation({
+    mutationFn: (leadId: string) => convertLead(account, leadId),
+    onSuccess: (res) => {
+      invalidate();
+      setBoardMsg(
+        <>
+          {res.lead.name} is now a live project.{' '}
+          <button className="underline text-accent" onClick={() => navigate(`/projects/${res.project.id}`)}>
+            Open it to staff the team
+          </button>
+        </>,
+      );
+    },
+    onError: (e: Error) => {
+      setBoardMsg(
+        e.message === 'conversion_needs_admin'
+          ? 'Conversion sits with the super admin or operations director.'
+          : e.message === 'already_converted'
+            ? 'This lead already lives on as a project.'
+            : 'That did not convert. The fault is ours. Try again in a moment.',
+      );
+    },
   });
 
   if (leads.isError) {
@@ -331,6 +383,29 @@ export default function Pipeline() {
   const openStages = STAGES.filter((s) => OPEN_KEYS.includes(s.key));
   const restStages = STAGES.filter((s) => !OPEN_KEYS.includes(s.key));
   const s = summary.data;
+
+  // Drag a card onto any stage (round F). Dropping on Converted runs the full
+  // conversion, so the lead arrives as a live project, never as a loose label.
+  const dropProps = (stage: LeadStage) => ({
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setOverStage(stage); },
+    onDragLeave: () => setOverStage((cur) => (cur === stage ? null : cur)),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setOverStage(null);
+      const id = e.dataTransfer.getData('text/plain');
+      const lead = all.find((l) => l.id === id);
+      if (!lead || lead.stage === stage) return;
+      setBoardMsg(null);
+      if (stage === 'converted') {
+        if (lead.convertedProjectId) setBoardMsg('This lead already lives on as a project.');
+        else dropConvert.mutate(id);
+      } else {
+        dropMove.mutate({ leadId: id, stage });
+      }
+    },
+  });
+  const dropClass = (stage: LeadStage) =>
+    overStage === stage ? 'rounded-personal outline outline-2 outline-accent/60 outline-offset-4' : '';
 
   return (
     <div>
@@ -368,9 +443,14 @@ export default function Pipeline() {
         </Card>
       )}
 
+      {boardMsg && <Banner tone="info">{boardMsg}</Banner>}
+      <p className="text-xs text-ink-faint mt-2 mb-3">
+        Drag a card between stages, or use the arrows on the card. Dropping a lead on Converted turns it into a live project.
+      </p>
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_0.75fr] gap-4 items-start">
         {openStages.map((stage) => (
-          <section key={stage.key} aria-label={stage.label}>
+          <section key={stage.key} aria-label={stage.label} {...dropProps(stage.key)} className={dropClass(stage.key)}>
             <div className="mb-2">
               <h2 className="font-medium text-ink">{stage.label}</h2>
               <p className="text-xs text-ink-faint">{stage.blurb}</p>
@@ -395,7 +475,7 @@ export default function Pipeline() {
 
         <section aria-label="Converted and parked">
           {restStages.map((stage) => (
-            <div key={stage.key} className="mb-5">
+            <div key={stage.key} className={`mb-5 ${dropClass(stage.key)}`} {...dropProps(stage.key)}>
               <div className="mb-2">
                 <h2 className="font-medium text-ink">{stage.label}</h2>
                 <p className="text-xs text-ink-faint">{stage.blurb}</p>

@@ -6,7 +6,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount, useSession } from '../../stores/session';
 import { getPortfolio, type PortfolioRow } from '../../api/queries';
-import { Button, EmptyState, LedgerTable, Masked, PageHeader, StatusChip, Td, Th } from '../../components/ui';
+import { Button, EmptyState, LedgerTable, Masked, NewBadge, PageHeader, StatusChip, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPct } from '../../lib/format';
 
 type SortKey = 'name' | 'status' | 'fee' | 'cost' | 'gp' | 'margin' | 'pph' | 'hours';
@@ -129,6 +129,7 @@ export default function Portfolio() {
                 <Link to={`/projects/${r.project.id}`} className="font-medium hover:text-accent">
                   {r.project.name}
                 </Link>
+                <NewBadge createdAt={r.project.createdAt} />
                 <div className="text-xs text-ink-faint">{r.project.code} · {r.project.currency}{r.project.isProBono ? ' · pro bono' : ''}</div>
               </Td>
               <Td><StatusChip tone={STATUS_TONE[r.project.status] ?? 'neutral'}>{r.project.status.replace(/_/g, ' ')}</StatusChip></Td>

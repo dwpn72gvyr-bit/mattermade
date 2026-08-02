@@ -1,32 +1,63 @@
 // §11 Stage A0 acceptance: tokens visible in a /styleguide route. Extended in
-// A4 to render every component in its states.
+// A4 to render every component in its states, and in round F to carry the
+// OuterEdit Brand Guidelines v1.0: palette, typefaces, and the light and dark
+// expressions of one system.
 
 import React from 'react';
 import {
   PageHeader, Card, Button, StatusChip, Masked, EmptyState, Stat, BurnBar,
-  EstimateVsActual, LedgerTable, Th, Td, CompletionRing, Banner,
+  EstimateVsActual, LedgerTable, Th, Td, CompletionRing, Banner, NewBadge,
 } from '../components/ui';
 import { fmtMoneyWhole, fmtPct } from '../lib/format';
+import { applyTheme, getTheme, todayStr } from '../api/settings';
 
-const SWATCHES = [
-  ['paper', '#FAF8F4'], ['raised', '#FFFFFF'], ['sunken', '#F1EDE6'],
-  ['ink', '#2B2B2B'], ['ink muted', '#6E6A64'], ['ink faint', '#8A8A8A'],
-  ['line', '#D9D4CC'], ['accent', '#3D5A4C'], ['positive', '#4E7A52'],
-  ['caution', '#B98A2E'], ['critical', '#A5432E'], ['info', '#3E5C7A'],
+/** Live tokens rendered through the CSS variables, so this page shows the
+ *  active theme truthfully in both light and dark mode. */
+const TOKENS = [
+  ['paper', 'bg-paper'], ['raised', 'bg-raised'], ['sunken', 'bg-sunken'],
+  ['ink', 'bg-ink'], ['line', 'bg-line'], ['accent', 'bg-accent'],
+  ['positive', 'bg-positive'], ['caution', 'bg-caution'],
+  ['critical', 'bg-critical'], ['info', 'bg-info'],
+] as const;
+
+/** The fixed brand palette from the guidelines, shown as printed. */
+const BRAND = [
+  ['Paper', '#F0F0F0'], ['Ink', '#111111'], ['Craft Orange', '#FC712B'],
+  ['Legacy Blue', '#3337FF'], ['Green', '#78FF9B'], ['Lilac', '#E1CDFC'],
 ] as const;
 
 export default function Styleguide() {
+  const theme = getTheme();
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Studio Ledger styleguide"
-        lede="Warm paper editorial. The dignity of a beautifully kept account book, rendered in contemporary type."
+        title="OuterEdit styleguide"
+        lede="One brand system with a light and a dark expression. The dignity of a beautifully kept account book, set in the studio's own voice."
       />
 
       <Card as="section">
-        <h2 className="display text-lg mb-3">Tokens</h2>
+        <h2 className="display text-lg mb-3">Brand</h2>
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
+          <div>
+            <div className="font-ui font-extrabold text-2xl tracking-tight leading-none">OUTEREDIT</div>
+            <div className="brand-label text-xs text-ink-faint mt-1">Make Meaningful Matter · Est. 2011, Singapore</div>
+          </div>
+          <div className="flex items-center gap-1 text-xs" role="group" aria-label="Theme">
+            <span className="text-ink-faint mr-1">Theme</span>
+            {(['light', 'dark', 'system'] as const).map((t) => (
+              <button
+                key={t}
+                aria-pressed={theme === t}
+                className={`px-2 py-1 rounded-sm border ${theme === t ? 'border-accent text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
+                onClick={() => { applyTheme(t); window.location.reload(); }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-          {SWATCHES.map(([name, hex]) => (
+          {BRAND.map(([name, hex]) => (
             <div key={name}>
               <div className="h-12 rounded-financial border border-line" style={{ background: hex }} />
               <div className="text-xs text-ink-muted mt-1">{name}</div>
@@ -34,15 +65,36 @@ export default function Styleguide() {
             </div>
           ))}
         </div>
+        <p className="text-sm text-ink-muted mt-3">
+          Craft Orange is the working accent in both modes. In dark mode the console sits on Ink,
+          Green carries positive signals and mono labels, and Lilac appears sparingly as a highlight.
+          Paper and Ink swap roles between the two expressions; everything else stays put.
+        </p>
+      </Card>
+
+      <Card as="section">
+        <h2 className="display text-lg mb-3">Tokens in the current theme</h2>
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+          {TOKENS.map(([name, cls]) => (
+            <div key={name}>
+              <div className={`h-12 rounded-financial border border-line ${cls}`} />
+              <div className="text-xs text-ink-muted mt-1">{name}</div>
+            </div>
+          ))}
+        </div>
         <div className="mt-4 space-y-1">
-          <p className="text-2xl display">Editorial serif at 36</p>
-          <p className="text-xl display">Editorial serif at 28</p>
-          <p className="text-lg display">Editorial serif at 21, the smallest serif size</p>
-          <p className="text-md">UI grotesk 17</p>
-          <p className="text-base">UI grotesk 15, body</p>
-          <p className="text-sm text-ink-muted">UI grotesk 13, secondary</p>
-          <p className="text-xs text-ink-faint">UI grotesk 12, captions</p>
-          <p className="tabular text-md">Tabular figures: 1,234,567.89 · 0.5% · 38,000</p>
+          <p className="text-2xl display">Source Serif 4 at 36, editorial</p>
+          <p className="text-xl display">Source Serif 4 at 28</p>
+          <p className="text-lg display">Source Serif 4 at 21, the smallest serif size</p>
+          <p className="text-md">Manrope 17, interface</p>
+          <p className="text-base">Manrope 15, body</p>
+          <p className="text-sm text-ink-muted">Manrope 13, secondary</p>
+          <p className="text-xs text-ink-faint">Manrope 12, captions</p>
+          <p className="tabular text-md">Roboto Mono tabular figures: 1,234,567.89 · 0.5% · 38,000</p>
+          <p className="brand-label text-xs text-ink-muted">Roboto Mono brand label · EST. 2011 · SINGAPORE</p>
+          <p className="text-sm text-ink-muted mt-2">
+            Items added recently carry a quiet flag: Meridian Rebrand <NewBadge createdAt={todayStr()} />
+          </p>
         </div>
       </Card>
 

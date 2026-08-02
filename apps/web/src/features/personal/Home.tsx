@@ -249,7 +249,7 @@ export default function Home() {
             <div className="mt-5">
               <Link
                 to="/today"
-                className="inline-flex items-center justify-center rounded-financial font-medium transition-colors duration-settle bg-accent text-white hover:bg-[#33503f] text-md px-5 py-2"
+                className="inline-flex items-center justify-center rounded-financial font-medium transition-colors duration-settle bg-accent text-accent-contrast hover:bg-accent/85 text-md px-5 py-2"
               >
                 {fullyMapped ? 'Review today' : 'Map today'}
               </Link>

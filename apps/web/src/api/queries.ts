@@ -596,7 +596,7 @@ export function getDirectory(account: DemoAccount) {
     if (!hasModule(account.userId, account.roles, 'directory')) throw new Error('not_allowed');
     return db.people.map((p) => ({
       id: p.id, name: p.name, title: p.title, team: p.team, roleKey: p.roleKey,
-      skills: p.skills, employmentStatus: p.employmentStatus,
+      skills: p.skills, employmentStatus: p.employmentStatus, createdAt: p.createdAt,
     }));
   });
 }

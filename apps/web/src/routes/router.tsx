@@ -69,6 +69,7 @@ export const router = createBrowserRouter([
       { path: '/admin/templates', element: lazyFeature(() => import('../features/admin/Templates'), 'Templates') },
       { path: '/admin/audit', element: lazyFeature(() => import('../features/admin/AuditLog'), 'Audit log') },
       { path: '/admin/settings', element: lazyFeature(() => import('../features/admin/Settings'), 'Settings') },
+      { path: '/admin/backup', element: lazyFeature(() => import('../features/admin/Backup'), 'Data backup') },
       {
         path: '/styleguide',
         element: (
