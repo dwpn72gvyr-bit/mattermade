@@ -7,12 +7,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAccount, useSession } from '../../stores/session';
 import { getCockpit, getCockpitTrend, MONTHS } from '../../api/queries';
+import { pipelineSummary } from '../../api/bizdev';
+import { todayStr } from '../../api/settings';
 import { Banner, Card, LedgerTable, PageHeader, Stat, StatusChip, Td, Th } from '../../components/ui';
 import { fmtMoneyWhole, fmtPct, fmtPeriod } from '../../lib/format';
 
 export default function Cockpit() {
   const account = useAccount();
-  const [month, setMonth] = useState('2026-05');
+  // Default to the most recent complete month; the running month is still in motion.
+  const currentYm = todayStr().slice(0, 7);
+  const completed = MONTHS.filter((m) => m < currentYm);
+  const [month, setMonth] = useState(completed[completed.length - 1] ?? MONTHS[MONTHS.length - 1]!);
   const cockpit = useQuery({
     queryKey: ['cockpit', account.userId, month],
     queryFn: () => getCockpit(account, month),
@@ -20,6 +25,11 @@ export default function Cockpit() {
   const trend = useQuery({
     queryKey: ['cockpit-trend', account.userId],
     queryFn: () => getCockpitTrend(account),
+  });
+  const pipeline = useQuery({
+    queryKey: ['pipeline-summary', account.userId],
+    queryFn: () => pipelineSummary(account),
+    retry: false,
   });
 
   const c = cockpit.data;
@@ -59,7 +69,17 @@ export default function Cockpit() {
           )}
 
           <div className="grid md:grid-cols-4 gap-4">
-            <Card><Stat label="Recognised revenue" value={fmtMoneyWhole(c.recognisedRevenueMinor)} sub={fmtPeriod(month)} /></Card>
+            <Card>
+              <Stat
+                label="Recognised revenue"
+                value={fmtMoneyWhole(c.recognisedRevenueMinor)}
+                sub={
+                  pipeline.data
+                    ? `${fmtPeriod(month)} · weighted pipeline ${fmtMoneyWhole(pipeline.data.weightedPipelineMinor)}`
+                    : fmtPeriod(month)
+                }
+              />
+            </Card>
             <Card><Stat label="Project gross profit" value={fmtMoneyWhole(c.projectGrossProfitMinor)} tone={c.projectGrossProfitMinor < 0 ? 'critical' : 'positive'} sub="recognised basis" /></Card>
             <Card>
               <Stat
